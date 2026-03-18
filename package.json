@@ -1,0 +1,16 @@
+{
+  "name": "followup_assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Daily ClickUp-to-Slack follow-up worker",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "once": "node src/index.mjs --once",
+    "dry-run": "node src/index.mjs --once --dry-run",
+    "test": "node --test",
+    "supabase:db:push": "npx supabase db push",
+    "supabase:function:deploy": "npx supabase functions deploy daily-task-status --project-ref xfcouttxjdftvntbnjcs",
+    "supabase:secrets:set": "npx supabase secrets set --env-file supabase/secrets.env --project-ref xfcouttxjdftvntbnjcs"
+  }
+}

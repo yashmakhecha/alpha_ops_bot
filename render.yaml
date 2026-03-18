@@ -1,0 +1,50 @@
+services:
+  - type: worker
+    name: alpha-clickup-followup
+    runtime: node
+    region: singapore
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    disk:
+      name: overdue-log
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    envVars:
+      - key: CLICKUP_TOKEN
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: CLICKUP_SOURCE_TYPE
+        value: list
+      - key: CLICKUP_SOURCE_ID
+        value: 901613969789
+      - key: CLICKUP_SOURCE_URL
+        value: https://app.clickup.com/90161148770/v/li/901613969789
+      - key: OWNER_MAP_FILE
+        value: ./config/owner-map.json
+      - key: MESSAGE_STYLE
+        value: option_b
+      - key: OVERDUE_LOG_FILE
+        value: ./data/overdue-state.json
+      - key: ADMIN_DM_ENABLED
+        value: "true"
+      - key: ADMIN_DM_EMAIL
+        value: yash@get-alpha.ai
+      - key: SCHEDULE_TIME
+        value: 21:00
+      - key: SCHEDULE_TIMEZONE
+        value: Asia/Kolkata
+      - key: INCLUDE_UNASSIGNED
+        value: "false"
+      - key: CLICKUP_BASE_URL
+        value: https://api.clickup.com/api/v2
+      - key: SLACK_BASE_URL
+        value: https://slack.com/api
+      - key: SLACK_DESTINATION_TYPE
+        value: dm
+      - key: SLACK_DM_EMAIL
+        value: yash@get-alpha.ai
+      - key: SLACK_CHANNEL_ID
+        value: "#all-alpha"

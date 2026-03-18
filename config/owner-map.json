@@ -1,0 +1,48 @@
+{
+  "owners": [
+    {
+      "clickup": {
+        "userId": "212515329",
+        "email": "yash@get-alpha.ai",
+        "name": "Yash Makhecha"
+      },
+      "slack": {
+        "email": "yash@get-alpha.ai",
+        "realName": "Yash Makhecha"
+      }
+    },
+    {
+      "clickup": {
+        "userId": "100984639",
+        "email": "ankur@get-alpha.ai",
+        "name": "Ankur Sahu"
+      },
+      "slack": {
+        "email": "ankur@get-alpha.ai",
+        "realName": "Ankur Sahu"
+      }
+    },
+    {
+      "clickup": {
+        "userId": "100983707",
+        "email": "anshul@get-alpha.ai",
+        "name": "Anshul Kardam"
+      },
+      "slack": {
+        "email": "anshul@get-alpha.ai",
+        "realName": "Anshul Kardam"
+      }
+    },
+    {
+      "clickup": {
+        "userId": "100930007",
+        "email": "yuvraj@get-alpha.ai",
+        "name": "Yuvraj Jangir"
+      },
+      "slack": {
+        "email": "yuvraj@get-alpha.ai",
+        "realName": "Yuvraj Jangir"
+      }
+    }
+  ]
+}

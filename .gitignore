@@ -1,0 +1,7 @@
+.env
+.DS_Store
+data/overdue-state.json
+supabase/project.env
+supabase/secrets.env
+supabase/.temp/
+node_modules

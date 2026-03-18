@@ -1,0 +1,17 @@
+{
+  "owners": [
+    {
+      "clickup": {
+        "userId": "123456",
+        "email": "alex@company.com",
+        "name": "Alex Smith"
+      },
+      "slack": {
+        "userId": "U0123456789",
+        "email": "alex@company.com",
+        "displayName": "alex.smith",
+        "realName": "Alex Smith"
+      }
+    }
+  ]
+}

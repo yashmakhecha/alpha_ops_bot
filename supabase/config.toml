@@ -1,0 +1,4 @@
+project_id = "xfcouttxjdftvntbnjcs"
+
+[functions.daily-task-status]
+verify_jwt = false
