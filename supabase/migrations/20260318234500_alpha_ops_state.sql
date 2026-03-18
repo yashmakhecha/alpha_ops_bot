@@ -1,6 +1,4 @@
-create schema if not exists alpha_ops;
-
-create or replace function alpha_ops.set_updated_at()
+create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -10,20 +8,20 @@ begin
 end;
 $$;
 
-create table if not exists alpha_ops.app_state (
+create table if not exists public.app_state (
   key text primary key,
   value jsonb not null,
   updated_at timestamptz not null default timezone('utc', now())
 );
 
-drop trigger if exists app_state_set_updated_at on alpha_ops.app_state;
+drop trigger if exists app_state_set_updated_at on public.app_state;
 
 create trigger app_state_set_updated_at
-before update on alpha_ops.app_state
+before update on public.app_state
 for each row
-execute function alpha_ops.set_updated_at();
+execute function public.set_updated_at();
 
-insert into alpha_ops.app_state (key, value)
+insert into public.app_state (key, value)
 values
   (
     'runtime_config',

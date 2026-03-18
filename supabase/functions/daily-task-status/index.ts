@@ -210,7 +210,6 @@ Deno.serve(async (request) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
   const { data: rows, error: loadError } = await supabase
-    .schema("alpha_ops")
     .from("app_state")
     .select("key, value")
     .in("key", ["runtime_config", "owner_map", "overdue_state"]);
@@ -254,7 +253,6 @@ Deno.serve(async (request) => {
   });
 
   const { error: saveError } = await supabase
-    .schema("alpha_ops")
     .from("app_state")
     .upsert(
       [
