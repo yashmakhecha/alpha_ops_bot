@@ -292,6 +292,88 @@ function getHierarchyLabel(index) {
   return `Level ${index + 1} Task`;
 }
 
+function getOwnerSummaryItems(items) {
+  const counts = new Map();
+
+  for (const item of items) {
+    if (Array.isArray(item.owners) && item.owners.length > 0) {
+      for (const owner of item.owners) {
+        const key = owner.id || owner.label;
+        const label = toSmartTitleCase(owner.label || owner.mention || "Owner");
+        counts.set(key, {
+          label,
+          count: (counts.get(key)?.count || 0) + 1
+        });
+      }
+
+      continue;
+    }
+
+    const label = item.isUnassigned ? "Unassigned" : "Owner Not Mapped";
+    counts.set(label, {
+      label,
+      count: (counts.get(label)?.count || 0) + 1
+    });
+  }
+
+  return [...counts.values()].sort((left, right) => {
+    if (right.count !== left.count) {
+      return right.count - left.count;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function buildOwnerSummaryLines(title, items) {
+  const lines = [`${title}: ${items.length}`];
+  const ownerSummary = getOwnerSummaryItems(items);
+
+  for (const owner of ownerSummary) {
+    lines.push(`- ${owner.label}: ${owner.count}`);
+  }
+
+  return lines;
+}
+
+export function buildReminderSummaryMessage({ dueToday, overdue }) {
+  const title = "*Daily Task Status*";
+  const lines = [
+    title,
+    ...buildOwnerSummaryLines("Total Due Today", dueToday),
+    "",
+    ...buildOwnerSummaryLines("Total Overdue", overdue)
+  ];
+  const blocks = [
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Daily Task Status"
+      }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: buildOwnerSummaryLines("Total Due Today", dueToday).join("\n")
+      }
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: buildOwnerSummaryLines("Total Overdue", overdue).join("\n")
+      }
+    }
+  ];
+
+  return {
+    text: lines.join("\n").trim(),
+    blocks
+  };
+}
+
 function formatFriendlyTaskBlock(task, kind, taskProperties) {
   const pathSegments = getTaskPathSegments(task);
   const statusEmoji = getStatusEmoji(task);
@@ -303,15 +385,13 @@ function formatFriendlyTaskBlock(task, kind, taskProperties) {
   const pathLines = pathSegments.map((segment, index) => {
     const indent = "  ".repeat(index);
     const hierarchyLabel = getHierarchyLabel(index);
-    const label = escapeSlackText(
-      `${hierarchyLabel}: ${toSmartTitleCase(segment.label || formatTaskLabel(segment))}`
-    );
+    const title = escapeSlackText(toSmartTitleCase(segment.label || formatTaskLabel(segment)));
 
     if (index === 0) {
-      return `${indent}- ${statusEmoji} *<${segment.url}|${label}>*`;
+      return `${indent}- ${statusEmoji} ${hierarchyLabel}: *<${segment.url}|${title}>*`;
     }
 
-    return `${indent}- <${segment.url}|${label}>`;
+    return `${indent}- ${hierarchyLabel}: <${segment.url}|${title}>`;
   });
   const pathBlockingLines = pathSegments.flatMap((segment, index) => {
     if (!Array.isArray(segment.blockingTasks) || segment.blockingTasks.length === 0) {

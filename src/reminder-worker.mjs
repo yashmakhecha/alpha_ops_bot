@@ -1,9 +1,10 @@
 import { fetchOpenTasks } from "./clickup.mjs";
 import { buildAdminSummaryMessage } from "./admin-summary.mjs";
 import { buildReminderBuckets } from "./reminder-items.mjs";
-import { buildReminderMessage } from "./message.mjs";
+import { buildReminderMessage, buildReminderSummaryMessage } from "./message.mjs";
 import { updateOverdueLog } from "./overdue-log.mjs";
 import { findOwnerMapping, getOwnerLookupCandidate, loadOwnerMap } from "./owner-map.mjs";
+import { postReminderBundle } from "./reminder-post.mjs";
 import { SlackClient } from "./slack.mjs";
 
 async function resolveTaskOwners(task, ownerMap, slack) {
@@ -106,6 +107,10 @@ export async function runReminder(config) {
     console.log("No open ClickUp tasks matched the reminder criteria.");
   }
 
+  const summaryMessage = buildReminderSummaryMessage({
+    dueToday,
+    overdue
+  });
   const message = buildReminderMessage({
     dueToday,
     overdue,
@@ -122,10 +127,11 @@ export async function runReminder(config) {
   };
 
   if (dueToday.length > 0 || overdue.length > 0) {
-    result = await slack.postMessage({
+    result = await postReminderBundle({
+      slack,
       channel: destination.channel,
-      text: message.text,
-      blocks: message.blocks
+      summaryMessage,
+      detailMessage: message
     });
   }
 
@@ -158,6 +164,8 @@ export async function runReminder(config) {
 
   if (config.dryRun) {
     console.log("Dry run only. Slack message preview:\n");
+    console.log(summaryMessage.text);
+    console.log("\nThread reply preview:\n");
     console.log(message.text);
   } else if (dueToday.length > 0 || overdue.length > 0) {
     console.log(`Slack reminder posted to ${destination.label}.`);

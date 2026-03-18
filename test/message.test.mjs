@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildReminderMessage } from "../src/message.mjs";
+import { buildReminderMessage, buildReminderSummaryMessage } from "../src/message.mjs";
 
 test("buildReminderMessage renders option A as the compact table layout", () => {
   const message = buildReminderMessage({
@@ -130,9 +130,9 @@ test("buildReminderMessage renders option B as a per-task friendly card layout",
   });
 
   assert.match(message.text, /Due Today \(1\)/);
-  assert.match(message.text, /- :arrow_forward: \*<https:\/\/app.clickup.com\/t\/parent-1\|Task: OPS-1: Pipeline Work>\*/);
-  assert.match(message.text, /  - <https:\/\/app.clickup.com\/t\/mid-1\|Sub-task: OPS-10: Proposal Stream>/);
-  assert.match(message.text, /    - <https:\/\/app.clickup.com\/t\/1\|Sub-sub-task: OPS-12: Send Proposal>/);
+  assert.match(message.text, /- :arrow_forward: Task: \*<https:\/\/app.clickup.com\/t\/parent-1\|OPS-1: Pipeline Work>\*/);
+  assert.match(message.text, /  - Sub-task: <https:\/\/app.clickup.com\/t\/mid-1\|OPS-10: Proposal Stream>/);
+  assert.match(message.text, /    - Sub-sub-task: <https:\/\/app.clickup.com\/t\/1\|OPS-12: Send Proposal>/);
   assert.match(message.text, /      - Status: In Progress/);
   assert.match(message.text, /      - Priority: P2 \(High\) :second_place_medal:/);
   assert.match(message.text, /      - Due: Today/);
@@ -188,4 +188,32 @@ test("buildReminderMessage respects the selected task properties", () => {
   assert.doesNotMatch(message.text, /Priority:/);
   assert.doesNotMatch(message.text, /Due:/);
   assert.doesNotMatch(message.text, /Blocking:/);
+});
+
+test("buildReminderSummaryMessage renders total counts and per-owner counts", () => {
+  const summary = buildReminderSummaryMessage({
+    dueToday: [
+      {
+        owners: [{ id: "U1", label: "Yuvraj Jangir" }]
+      },
+      {
+        owners: [{ id: "U1", label: "Yuvraj Jangir" }]
+      },
+      {
+        owners: [{ id: "U2", label: "Anshul Kardam" }]
+      }
+    ],
+    overdue: [
+      {
+        owners: [{ id: "U3", label: "Ankur Sahu" }]
+      }
+    ]
+  });
+
+  assert.match(summary.text, /\*Daily Task Status\*/);
+  assert.match(summary.text, /Total Due Today: 3/);
+  assert.match(summary.text, /- Yuvraj Jangir: 2/);
+  assert.match(summary.text, /- Anshul Kardam: 1/);
+  assert.match(summary.text, /Total Overdue: 1/);
+  assert.match(summary.text, /- Ankur Sahu: 1/);
 });
