@@ -1,3 +1,7 @@
+export const TASK_PROPERTY_OPTIONS = ["status", "priority", "due", "owner", "blocking"];
+export const DEFAULT_TASK_PROPERTIES = [...TASK_PROPERTY_OPTIONS];
+export const DEFAULT_SCHEDULE_TIMES = ["21:00"];
+
 function readEnv(getEnvValue, key) {
   if (typeof getEnvValue === "function") {
     return getEnvValue(key);
@@ -26,7 +30,64 @@ function asBoolean(value, fallback = false) {
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
 }
 
+function isValidTime(value) {
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(String(value || "").trim());
+}
+
+export function normalizeScheduleTimes(value, fallback = DEFAULT_SCHEDULE_TIMES) {
+  const values = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(/[,\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  const normalized = [...new Set(values.filter(isValidTime))].sort();
+
+  return normalized.length > 0 ? normalized : [...fallback];
+}
+
+export function formatScheduleTimes(value, fallback = DEFAULT_SCHEDULE_TIMES) {
+  return normalizeScheduleTimes(value, fallback).join(", ");
+}
+
+export function normalizeTaskProperties(value, fallback = DEFAULT_TASK_PROPERTIES) {
+  const values = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(/[,\n]/)
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+
+  const normalized = TASK_PROPERTY_OPTIONS.filter((item) => values.includes(item));
+
+  return normalized.length > 0 ? normalized : [...fallback];
+}
+
+function derivePublicReminderConfig(slackConfig, fallback) {
+  const slack = slackConfig || {};
+  const destinationType = slack.destinationType === "dm" ? "dm" : "channel";
+
+  return {
+    enabled:
+      slack.enabled != null
+        ? asBoolean(slack.enabled, fallback.enabled)
+        : destinationType === "channel"
+          ? true
+          : fallback.enabled,
+    destinationType,
+    channelId: asString(slack.channelId, fallback.channelId),
+    dmUserId: asString(slack.dmUserId, fallback.dmUserId),
+    dmEmail: asString(slack.dmEmail, fallback.dmEmail),
+    dmName: asString(slack.dmName, fallback.dmName)
+  };
+}
+
 export function defaultRuntimeConfig({ getEnvValue } = {}) {
+  const envScheduleTimes = normalizeScheduleTimes(
+    readEnv(getEnvValue, "SCHEDULE_TIMES") || readEnv(getEnvValue, "SCHEDULE_TIME")
+  );
+
   return {
     clickup: {
       sourceType: readEnv(getEnvValue, "CLICKUP_SOURCE_TYPE") === "view" ? "view" : "list",
@@ -34,8 +95,9 @@ export function defaultRuntimeConfig({ getEnvValue } = {}) {
       sourceUrl: asString(readEnv(getEnvValue, "CLICKUP_SOURCE_URL"))
     },
     slack: {
-      destinationType: readEnv(getEnvValue, "SLACK_DESTINATION_TYPE") === "channel" ? "channel" : "dm",
-      channelId: asString(readEnv(getEnvValue, "SLACK_CHANNEL_ID")),
+      enabled: asBoolean(readEnv(getEnvValue, "PUBLIC_REMINDER_ENABLED"), true),
+      destinationType: readEnv(getEnvValue, "SLACK_DESTINATION_TYPE") === "dm" ? "dm" : "channel",
+      channelId: asString(readEnv(getEnvValue, "SLACK_CHANNEL_ID"), "#all-alpha"),
       dmUserId: asString(readEnv(getEnvValue, "SLACK_DM_USER_ID")),
       dmEmail: asString(readEnv(getEnvValue, "SLACK_DM_EMAIL")),
       dmName: asString(readEnv(getEnvValue, "SLACK_DM_NAME"))
@@ -48,20 +110,22 @@ export function defaultRuntimeConfig({ getEnvValue } = {}) {
       dmName: asString(readEnv(getEnvValue, "ADMIN_DM_NAME"))
     },
     schedule: {
-      time: asString(readEnv(getEnvValue, "SCHEDULE_TIME"), "21:00"),
+      time: envScheduleTimes[0],
+      times: envScheduleTimes,
       timezone: asString(readEnv(getEnvValue, "SCHEDULE_TIMEZONE"), "Asia/Kolkata")
     },
     includeUnassigned: asBoolean(readEnv(getEnvValue, "INCLUDE_UNASSIGNED"), false),
-    messageStyle: readEnv(getEnvValue, "MESSAGE_STYLE") === "option_a" ? "option_a" : "option_b"
+    messageStyle: readEnv(getEnvValue, "MESSAGE_STYLE") === "option_a" ? "option_a" : "option_b",
+    taskProperties: normalizeTaskProperties(readEnv(getEnvValue, "TASK_PROPERTIES"))
   };
 }
 
 export function mergeRuntimeConfig(value, { getEnvValue } = {}) {
   const fallback = defaultRuntimeConfig({ getEnvValue });
   const clickup = value?.clickup || {};
-  const slack = value?.slack || {};
   const adminSummary = value?.adminSummary || {};
   const schedule = value?.schedule || {};
+  const scheduleTimes = normalizeScheduleTimes(schedule.times || schedule.time, fallback.schedule.times);
 
   return {
     clickup: {
@@ -69,13 +133,7 @@ export function mergeRuntimeConfig(value, { getEnvValue } = {}) {
       sourceId: asString(clickup.sourceId, fallback.clickup.sourceId),
       sourceUrl: asString(clickup.sourceUrl, fallback.clickup.sourceUrl)
     },
-    slack: {
-      destinationType: slack.destinationType === "channel" ? "channel" : fallback.slack.destinationType,
-      channelId: asString(slack.channelId, fallback.slack.channelId),
-      dmUserId: asString(slack.dmUserId, fallback.slack.dmUserId),
-      dmEmail: asString(slack.dmEmail, fallback.slack.dmEmail),
-      dmName: asString(slack.dmName, fallback.slack.dmName)
-    },
+    slack: derivePublicReminderConfig(value?.slack, fallback.slack),
     adminSummary: {
       enabled: asBoolean(adminSummary.enabled, fallback.adminSummary.enabled),
       destinationType: "dm",
@@ -84,10 +142,12 @@ export function mergeRuntimeConfig(value, { getEnvValue } = {}) {
       dmName: asString(adminSummary.dmName, fallback.adminSummary.dmName)
     },
     schedule: {
-      time: asString(schedule.time, fallback.schedule.time),
+      time: scheduleTimes[0],
+      times: scheduleTimes,
       timezone: asString(schedule.timezone, fallback.schedule.timezone)
     },
     includeUnassigned: asBoolean(value?.includeUnassigned, fallback.includeUnassigned),
-    messageStyle: value?.messageStyle === "option_a" ? "option_a" : fallback.messageStyle
+    messageStyle: value?.messageStyle === "option_a" ? "option_a" : fallback.messageStyle,
+    taskProperties: normalizeTaskProperties(value?.taskProperties, fallback.taskProperties)
   };
 }

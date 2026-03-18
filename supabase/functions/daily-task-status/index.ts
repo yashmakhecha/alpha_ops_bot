@@ -1,6 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { buildAdminSummaryMessage } from "../../../src/admin-summary.mjs";
+import {
+  getCurrentScheduleSlot,
+  hasDeliveredForSlot,
+  markDeliveredForSlot,
+  normalizeDeliveryState
+} from "../../../src/delivery-state.mjs";
 import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveDestination } from "../../../src/reminder-delivery.mjs";
@@ -17,6 +23,7 @@ type RuntimeConfig = {
     sourceUrl?: string | null;
   };
   slack: {
+    enabled: boolean;
     destinationType: "channel" | "dm";
     channelId?: string | null;
     dmUserId?: string | null;
@@ -32,10 +39,12 @@ type RuntimeConfig = {
   };
   schedule: {
     time: string;
+    times: string[];
     timezone: string;
   };
   includeUnassigned: boolean;
   messageStyle: "option_a" | "option_b";
+  taskProperties: string[];
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -64,7 +73,9 @@ Deno.serve(async (request) => {
   }
 
   const body = await readJsonBody(request);
-  const dryRun = String(body?.dryRun || new URL(request.url).searchParams.get("dry_run") || "") === "true";
+  const url = new URL(request.url);
+  const dryRun = String(body?.dryRun || url.searchParams.get("dry_run") || "") === "true";
+  const force = String(body?.force || url.searchParams.get("force") || "") === "true";
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const clickupToken = Deno.env.get("CLICKUP_TOKEN");
@@ -83,7 +94,7 @@ Deno.serve(async (request) => {
   const { data: rows, error: loadError } = await supabase
     .from("app_state")
     .select("key, value")
-    .in("key", ["runtime_config", "owner_map", "overdue_state"]);
+    .in("key", ["runtime_config", "owner_map", "overdue_state", "delivery_state"]);
 
   if (loadError) {
     return jsonResponse({ error: loadError.message }, 500);
@@ -95,6 +106,34 @@ Deno.serve(async (request) => {
   }) as RuntimeConfig;
   const ownerMap = normalizeOwnerMap(rowMap.get("owner_map"));
   const overdueState = rowMap.get("overdue_state") || undefined;
+  const deliveryState = normalizeDeliveryState(rowMap.get("delivery_state"));
+  const scheduleSlot = getCurrentScheduleSlot({
+    now: new Date(),
+    timeZone: runtimeConfig.schedule.timezone,
+    scheduleTimes: runtimeConfig.schedule.times
+  });
+  const isScheduledInvocation = Boolean(providedCronSecret);
+
+  if (isScheduledInvocation && !dryRun && !force) {
+    if (!runtimeConfig.schedule.times.includes(scheduleSlot.timeKey)) {
+      return jsonResponse({
+        ok: true,
+        skipped: true,
+        reason: "outside_scheduled_time_window",
+        slot: scheduleSlot
+      });
+    }
+
+    if (hasDeliveredForSlot(deliveryState, scheduleSlot)) {
+      return jsonResponse({
+        ok: true,
+        skipped: true,
+        reason: "already_sent_for_time_slot",
+        slot: scheduleSlot
+      });
+    }
+  }
+
   const slack = new SlackClient({
     baseUrl: Deno.env.get("SLACK_BASE_URL") || "https://slack.com/api",
     botToken: slackBotToken,
@@ -111,22 +150,6 @@ Deno.serve(async (request) => {
   });
   const { runDate, buckets, dueToday, overdue, overdueLog } = snapshot;
 
-  const { error: saveError } = await supabase
-    .from("app_state")
-    .upsert(
-      [
-        {
-          key: "overdue_state",
-          value: overdueLog.state
-        }
-      ],
-      { onConflict: "key" }
-    );
-
-  if (saveError) {
-    return jsonResponse({ error: saveError.message }, 500);
-  }
-
   const message = buildReminderMessage({
     dueToday,
     overdue,
@@ -134,19 +157,22 @@ Deno.serve(async (request) => {
     timeZone: runtimeConfig.schedule.timezone,
     sourceLabel: buckets.sourceLabel || runtimeConfig.clickup.sourceId,
     sourceUrl: runtimeConfig.clickup.sourceUrl || buckets.sourceUrl,
-    messageStyle: runtimeConfig.messageStyle
+    messageStyle: runtimeConfig.messageStyle,
+    taskProperties: runtimeConfig.taskProperties
   });
 
   let reminderResult: unknown = { ok: true, skipped: true };
   let reminderDestination: { channel: string; label: string } | null = null;
+  let posted = false;
 
-  if (dueToday.length > 0 || overdue.length > 0) {
+  if (runtimeConfig.slack.enabled && (dueToday.length > 0 || overdue.length > 0)) {
     reminderDestination = await resolveDestination(runtimeConfig.slack, slack);
     reminderResult = await slack.postMessage({
       channel: reminderDestination.channel,
       text: message.text,
       blocks: message.blocks
     });
+    posted = true;
   }
 
   let adminResult: unknown = null;
@@ -167,6 +193,7 @@ Deno.serve(async (request) => {
       text: adminMessage.text,
       blocks: adminMessage.blocks
     });
+    posted = true;
 
     if (dryRun) {
       return jsonResponse({
@@ -186,14 +213,44 @@ Deno.serve(async (request) => {
     }
   }
 
+  if (!dryRun) {
+    const nextState = isScheduledInvocation && !force
+      ? markDeliveredForSlot(deliveryState, {
+          dateKey: scheduleSlot.dateKey,
+          timeKey: scheduleSlot.timeKey,
+          sentAt: runDate.toISOString()
+        })
+      : deliveryState;
+    const { error: saveError } = await supabase
+      .from("app_state")
+      .upsert(
+        [
+          {
+            key: "overdue_state",
+            value: overdueLog.state
+          },
+          {
+            key: "delivery_state",
+            value: nextState
+          }
+        ],
+        { onConflict: "key" }
+      );
+
+    if (saveError) {
+      return jsonResponse({ error: saveError.message }, 500);
+    }
+  }
+
   return jsonResponse({
     ok: true,
-    posted: dueToday.length > 0 || overdue.length > 0,
+    posted,
     taskCount: dueToday.length + overdue.length,
     reminderDestination: reminderDestination?.label || null,
     adminDestination: adminDestination?.label || null,
     reminderResult,
     adminResult,
-    totals: overdueLog.totals
+    totals: overdueLog.totals,
+    slot: scheduleSlot
   });
 });

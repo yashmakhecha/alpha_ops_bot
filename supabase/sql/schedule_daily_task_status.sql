@@ -7,7 +7,7 @@ where jobname = 'daily-task-status';
 -- CRON_SECRET example: your_shared_cron_secret
 select cron.schedule(
   'daily-task-status',
-  '30 15 * * *',
+  '* * * * *',
   $$
   select
     net.http_post(

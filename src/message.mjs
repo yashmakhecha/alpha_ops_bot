@@ -1,3 +1,5 @@
+import { normalizeTaskProperties } from "./runtime-config.mjs";
+
 function escapeSlackText(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
@@ -100,7 +102,7 @@ function formatParentCell(task) {
   )}\``;
 }
 
-function formatTaskLine(task, kind) {
+function formatTaskLine(task, kind, taskProperties) {
   const ownerMentions =
     task.ownerMentions && task.ownerMentions.length > 0
       ? task.ownerMentions.join(" ")
@@ -115,15 +117,27 @@ function formatTaskLine(task, kind) {
           .map((blockedTask) => `<${blockedTask.url}|${escapeSlackText(toSmartTitleCase(formatTaskLabel(blockedTask)))}>` )
           .join(", ")
       : "-";
-  const cells = [
-    formatParentCell(task),
-    `<${task.url}|${escapeSlackText(toSmartTitleCase(formatTaskLabel(task)))}>`,
-    escapeSlackText(toSmartTitleCase(task.statusLabel)),
-    task.priorityLabel ? escapeSlackText(toSmartTitleCase(task.priorityLabel)) : "-",
-    dueCell,
-    ownerMentions,
-    blockingCell
-  ];
+  const cells = [formatParentCell(task), `<${task.url}|${escapeSlackText(toSmartTitleCase(formatTaskLabel(task)))}>`];
+
+  if (taskProperties.includes("status")) {
+    cells.push(escapeSlackText(toSmartTitleCase(task.statusLabel)));
+  }
+
+  if (taskProperties.includes("priority")) {
+    cells.push(task.priorityLabel ? escapeSlackText(toSmartTitleCase(task.priorityLabel)) : "-");
+  }
+
+  if (taskProperties.includes("due")) {
+    cells.push(dueCell);
+  }
+
+  if (taskProperties.includes("owner")) {
+    cells.push(ownerMentions);
+  }
+
+  if (taskProperties.includes("blocking")) {
+    cells.push(blockingCell);
+  }
 
   return `• ${cells.join(" | ")}`;
 }
@@ -259,7 +273,7 @@ function getPriorityLabel(task) {
   return toSmartTitleCase(label);
 }
 
-function formatFriendlyTaskBlock(task, kind) {
+function formatFriendlyTaskBlock(task, kind, taskProperties) {
   const pathSegments = getTaskPathSegments(task);
   const statusEmoji = getStatusEmoji(task);
   const statusLabel = escapeSlackText(toSmartTitleCase(task.statusLabel));
@@ -286,14 +300,31 @@ function formatFriendlyTaskBlock(task, kind) {
     return [`${indent}- Blocking: ${formatBlockingTasks(segment.blockingTasks)} :no_entry:`];
   });
   const metadataIndent = "  ".repeat(Math.max(pathSegments.length - 1, 0));
+  const metadataLines = [];
+
+  if (taskProperties.includes("status")) {
+    metadataLines.push(`${metadataIndent}  - Status: ${statusLabel}`);
+  }
+
+  if (taskProperties.includes("priority") && priorityLine) {
+    metadataLines.push(priorityLine);
+  }
+
+  if (taskProperties.includes("due")) {
+    metadataLines.push(`${metadataIndent}  - Due: ${dueLabel}`);
+  }
+
+  if (taskProperties.includes("owner")) {
+    metadataLines.push(`${metadataIndent}  - Owner: ${formatTaskOwner(task)}`);
+  }
+
+  if (taskProperties.includes("blocking")) {
+    metadataLines.push(...pathBlockingLines);
+  }
 
   return [
     ...pathLines,
-    `${metadataIndent}  - Status: ${statusLabel}`,
-    priorityLine,
-    `${metadataIndent}  - Due: ${dueLabel}`,
-    `${metadataIndent}  - Owner: ${formatTaskOwner(task)}`,
-    ...pathBlockingLines
+    ...metadataLines
   ]
     .filter(Boolean)
     .join("\n");
@@ -333,8 +364,34 @@ function chunkLines(lines, maxCharacters = 2800) {
   return chunks;
 }
 
-function pushCategory({ blocks, lines, title, items, kind }) {
-  const headerLine = "*Parent* | *Task* | *Status* | *Priority* | *Due* | *Owner* | *Blocking*";
+function buildOptionAHeader(taskProperties) {
+  const columns = ["*Parent*", "*Task*"];
+
+  if (taskProperties.includes("status")) {
+    columns.push("*Status*");
+  }
+
+  if (taskProperties.includes("priority")) {
+    columns.push("*Priority*");
+  }
+
+  if (taskProperties.includes("due")) {
+    columns.push("*Due*");
+  }
+
+  if (taskProperties.includes("owner")) {
+    columns.push("*Owner*");
+  }
+
+  if (taskProperties.includes("blocking")) {
+    columns.push("*Blocking*");
+  }
+
+  return columns.join(" | ");
+}
+
+function pushCategory({ blocks, lines, title, items, kind, taskProperties }) {
+  const headerLine = buildOptionAHeader(taskProperties);
 
   blocks.push({
     type: "section",
@@ -360,7 +417,7 @@ function pushCategory({ blocks, lines, title, items, kind }) {
     return;
   }
 
-  const taskLines = items.map((item) => formatTaskLine(item, kind));
+  const taskLines = items.map((item) => formatTaskLine(item, kind, taskProperties));
   const blockLines = [headerLine, ...taskLines];
 
   for (const chunk of chunkLines(blockLines)) {
@@ -413,7 +470,7 @@ function buildHeaderAndIntro({ runDate, timeZone, sourceLabel, sourceUrl }) {
   };
 }
 
-function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl }) {
+function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl, taskProperties }) {
   const { lines, blocks } = buildHeaderAndIntro({ runDate, timeZone, sourceLabel, sourceUrl });
 
   pushCategory({
@@ -421,7 +478,8 @@ function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
     lines,
     title: "Due Today",
     items: dueToday,
-    kind: "dueToday"
+    kind: "dueToday",
+    taskProperties
   });
 
   blocks.push({
@@ -434,7 +492,8 @@ function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
     lines,
     title: "Overdue",
     items: overdue,
-    kind: "overdue"
+    kind: "overdue",
+    taskProperties
   });
 
   return {
@@ -443,7 +502,7 @@ function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
   };
 }
 
-function pushFriendlyCategory({ blocks, lines, title, items, kind }) {
+function pushFriendlyCategory({ blocks, lines, title, items, kind, taskProperties }) {
   blocks.push({
     type: "section",
     text: {
@@ -470,7 +529,7 @@ function pushFriendlyCategory({ blocks, lines, title, items, kind }) {
   }
 
   for (const item of items) {
-    const blockText = formatFriendlyTaskBlock(item, kind);
+    const blockText = formatFriendlyTaskBlock(item, kind, taskProperties);
     blocks.push({
       type: "section",
       text: {
@@ -483,12 +542,12 @@ function pushFriendlyCategory({ blocks, lines, title, items, kind }) {
   }
 }
 
-function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl }) {
+function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl, taskProperties }) {
   const { lines, blocks } = buildHeaderAndIntro({ runDate, timeZone, sourceLabel, sourceUrl });
   const totalTasks = dueToday.length + overdue.length;
 
   if (totalTasks > 40) {
-    return buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl });
+    return buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl, taskProperties });
   }
 
   pushFriendlyCategory({
@@ -496,7 +555,8 @@ function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
     lines,
     title: "Due Today",
     items: dueToday,
-    kind: "dueToday"
+    kind: "dueToday",
+    taskProperties
   });
 
   blocks.push({
@@ -509,7 +569,8 @@ function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
     lines,
     title: "Overdue",
     items: overdue,
-    kind: "overdue"
+    kind: "overdue",
+    taskProperties
   });
 
   return {
@@ -525,8 +586,11 @@ export function buildReminderMessage({
   timeZone,
   sourceLabel,
   sourceUrl,
-  messageStyle = "option_b"
+  messageStyle = "option_b",
+  taskProperties
 }) {
+  const visibleTaskProperties = normalizeTaskProperties(taskProperties);
+
   if (messageStyle === "option_a") {
     return buildOptionAMessage({
       dueToday,
@@ -534,7 +598,8 @@ export function buildReminderMessage({
       runDate,
       timeZone,
       sourceLabel,
-      sourceUrl
+      sourceUrl,
+      taskProperties: visibleTaskProperties
     });
   }
 
@@ -544,6 +609,7 @@ export function buildReminderMessage({
     runDate,
     timeZone,
     sourceLabel,
-    sourceUrl
+    sourceUrl,
+    taskProperties: visibleTaskProperties
   });
 }

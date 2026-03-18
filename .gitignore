@@ -4,5 +4,5 @@ data/overdue-state.json
 supabase/project.env
 supabase/secrets.env
 supabase/.temp/
-supabase/migrations/20260319003000_local_runtime_schedule.sql
+supabase/migrations/*local_runtime_schedule*.sql
 node_modules

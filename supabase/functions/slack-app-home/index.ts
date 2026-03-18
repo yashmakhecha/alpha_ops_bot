@@ -1,12 +1,16 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { buildAdminSummaryMessage } from "../../../src/admin-summary.mjs";
-import { buildAppHomeView } from "../../../src/app-home.mjs";
+import { APP_HOME_IDS, buildAppHomeView } from "../../../src/app-home.mjs";
 import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveAdminUserId, resolveDestination } from "../../../src/reminder-delivery.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
-import { mergeRuntimeConfig } from "../../../src/runtime-config.mjs";
+import {
+  mergeRuntimeConfig,
+  normalizeScheduleTimes,
+  normalizeTaskProperties
+} from "../../../src/runtime-config.mjs";
 import { parseSlackRequest, verifySlackSignature } from "../../../src/slack-signature.mjs";
 import { SlackClient } from "../../../src/slack.mjs";
 
@@ -31,7 +35,7 @@ async function loadState(supabase: ReturnType<typeof createClient>) {
   const { data: rows, error } = await supabase
     .from("app_state")
     .select("key, value")
-    .in("key", ["runtime_config", "owner_map", "overdue_state"]);
+    .in("key", ["runtime_config", "owner_map", "overdue_state", "delivery_state"]);
 
   if (error) {
     throw new Error(error.message);
@@ -44,8 +48,79 @@ async function loadState(supabase: ReturnType<typeof createClient>) {
       getEnvValue: (key: string) => Deno.env.get(key)
     }),
     ownerMap: normalizeOwnerMap(rowMap.get("owner_map")),
-    overdueState: rowMap.get("overdue_state") || undefined
+    overdueState: rowMap.get("overdue_state") || undefined,
+    deliveryState: rowMap.get("delivery_state") || undefined
   };
+}
+
+async function saveRuntimeConfig(supabase: ReturnType<typeof createClient>, runtimeConfig: unknown) {
+  const { error } = await supabase
+    .from("app_state")
+    .upsert(
+      [
+        {
+          key: "runtime_config",
+          value: runtimeConfig
+        }
+      ],
+      { onConflict: "key" }
+    );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+function getStateEntry(viewState: Record<string, any>, blockId: string, actionId: string) {
+  return viewState?.[blockId]?.[actionId];
+}
+
+function isChecked(viewState: Record<string, any>, blockId: string, actionId: string, value: string) {
+  const selected = getStateEntry(viewState, blockId, actionId)?.selected_options || [];
+  return selected.some((option: any) => option?.value === value);
+}
+
+function buildRuntimeConfigFromViewState(viewState: Record<string, any>, runtimeConfig: any) {
+  const selectedProperties =
+    getStateEntry(viewState, APP_HOME_IDS.taskPropertiesBlock, APP_HOME_IDS.taskPropertiesAction)?.selected_options?.map(
+      (option: any) => option.value
+    ) || runtimeConfig.taskProperties;
+  const selectedChannel =
+    getStateEntry(viewState, APP_HOME_IDS.publicChannelBlock, APP_HOME_IDS.publicChannelAction)
+      ?.selected_conversation || runtimeConfig.slack.channelId;
+  const scheduleInput =
+    getStateEntry(viewState, APP_HOME_IDS.scheduleTimesBlock, APP_HOME_IDS.scheduleTimesAction)?.value ||
+    runtimeConfig.schedule.times;
+
+  return mergeRuntimeConfig({
+    ...runtimeConfig,
+    slack: {
+      ...runtimeConfig.slack,
+      enabled: isChecked(
+        viewState,
+        APP_HOME_IDS.publicEnabledBlock,
+        APP_HOME_IDS.publicEnabledAction,
+        "public_enabled"
+      ),
+      destinationType: "channel",
+      channelId: selectedChannel || runtimeConfig.slack.channelId
+    },
+    adminSummary: {
+      ...runtimeConfig.adminSummary,
+      enabled: isChecked(
+        viewState,
+        APP_HOME_IDS.adminEnabledBlock,
+        APP_HOME_IDS.adminEnabledAction,
+        "admin_enabled"
+      )
+    },
+    schedule: {
+      ...runtimeConfig.schedule,
+      times: normalizeScheduleTimes(scheduleInput, runtimeConfig.schedule.times),
+      time: normalizeScheduleTimes(scheduleInput, runtimeConfig.schedule.times)[0]
+    },
+    taskProperties: normalizeTaskProperties(selectedProperties, runtimeConfig.taskProperties)
+  });
 }
 
 async function publishHome({
@@ -80,6 +155,10 @@ async function publishHome({
       slack,
       now: new Date()
     }));
+  const publicChannelId =
+    runtimeConfig.slack.destinationType === "channel" && runtimeConfig.slack.channelId
+      ? await slack.resolveChannelId(runtimeConfig.slack.channelId)
+      : "";
   const view = buildAppHomeView({
     viewerUserId,
     adminUserId,
@@ -88,7 +167,8 @@ async function publishHome({
     sourceLabel: nextSnapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId,
     sourceUrl: runtimeConfig.clickup.sourceUrl || nextSnapshot.buckets.sourceUrl,
     notice,
-    lastLoggedRunOn: overdueState?.lastRunOn ? String(overdueState.lastRunOn) : null
+    lastLoggedRunOn: overdueState?.lastRunOn ? String(overdueState.lastRunOn) : null,
+    publicChannelId: /^[CGD][A-Z0-9]+$/.test(publicChannelId || "") ? publicChannelId : ""
   });
 
   await slack.publishView({
@@ -126,7 +206,8 @@ async function sendTestDmNow({
     timeZone: runtimeConfig.schedule.timezone,
     sourceLabel,
     sourceUrl,
-    messageStyle: runtimeConfig.messageStyle
+    messageStyle: runtimeConfig.messageStyle,
+    taskProperties: runtimeConfig.taskProperties
   });
   const adminMessage = buildAdminSummaryMessage({
     ownerSummary: snapshot.overdueLog.ownerSummary,
@@ -149,14 +230,63 @@ async function sendTestDmNow({
     reminderNotice = "Reminder DM sent to you.";
   }
 
-  const adminDestination = await resolveDestination(dmConfig, slack);
+  if (runtimeConfig.adminSummary.enabled) {
+    const adminDestination = await resolveDestination(dmConfig, slack);
+    await slack.postMessage({
+      channel: adminDestination.channel,
+      text: adminMessage.text,
+      blocks: adminMessage.blocks
+    });
+    return `${reminderNotice} Team Progress Update sent to you.`;
+  }
+
+  return `${reminderNotice} Team Progress Update DM is currently disabled.`;
+}
+
+async function sendPublicNow({
+  slack,
+  runtimeConfig,
+  snapshot
+}: {
+  slack: SlackClient;
+  runtimeConfig: any;
+  snapshot: Awaited<ReturnType<typeof buildReminderSnapshot>>;
+}) {
+  if (!runtimeConfig.slack.channelId) {
+    return "Choose a public channel before sending.";
+  }
+
+  if (snapshot.dueToday.length === 0 && snapshot.overdue.length === 0) {
+    return "No due-today or overdue tasks to post publicly.";
+  }
+
+  const sourceLabel = snapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId;
+  const sourceUrl = runtimeConfig.clickup.sourceUrl || snapshot.buckets.sourceUrl;
+  const message = buildReminderMessage({
+    dueToday: snapshot.dueToday,
+    overdue: snapshot.overdue,
+    runDate: snapshot.runDate,
+    timeZone: runtimeConfig.schedule.timezone,
+    sourceLabel,
+    sourceUrl,
+    messageStyle: runtimeConfig.messageStyle,
+    taskProperties: runtimeConfig.taskProperties
+  });
+  const destination = await resolveDestination(
+    {
+      ...runtimeConfig.slack,
+      destinationType: "channel"
+    },
+    slack
+  );
+
   await slack.postMessage({
-    channel: adminDestination.channel,
-    text: adminMessage.text,
-    blocks: adminMessage.blocks
+    channel: destination.channel,
+    text: message.text,
+    blocks: message.blocks
   });
 
-  return `${reminderNotice} Team Progress Update sent to you.`;
+  return `Public message sent to ${destination.label}.`;
 }
 
 Deno.serve(async (request) => {
@@ -234,7 +364,6 @@ Deno.serve(async (request) => {
   if (payload.type === "block_actions") {
     const viewerUserId = String(payload.user?.id || "");
     const viewHash = String(payload.view?.hash || "");
-    let notice = "Home refreshed.";
 
     if (viewerUserId !== adminUserId) {
       await publishHome({
@@ -252,22 +381,51 @@ Deno.serve(async (request) => {
     }
 
     const actionId = String(payload.actions?.[0]?.action_id || "");
+
+    if (
+      ![
+        APP_HOME_IDS.saveSettingsAction,
+        APP_HOME_IDS.refreshHomeAction,
+        APP_HOME_IDS.sendTestDmAction,
+        APP_HOME_IDS.sendPublicNowAction
+      ].includes(actionId)
+    ) {
+      return okResponse();
+    }
+
+    let nextRuntimeConfig = runtimeConfig;
+    let notice = "Home refreshed.";
+
+    if (actionId !== APP_HOME_IDS.refreshHomeAction) {
+      nextRuntimeConfig = buildRuntimeConfigFromViewState(payload.view?.state?.values || {}, runtimeConfig);
+      await saveRuntimeConfig(supabase, nextRuntimeConfig);
+      notice = "Settings saved.";
+    }
+
     const snapshot = await buildReminderSnapshot({
       clickupBaseUrl: Deno.env.get("CLICKUP_BASE_URL") || "https://api.clickup.com/api/v2",
       clickupToken,
-      runtimeConfig,
+      runtimeConfig: nextRuntimeConfig,
       ownerMap,
       overdueState,
       slack,
       now: new Date()
     });
 
-    if (actionId === "send_test_dm_now") {
+    if (actionId === APP_HOME_IDS.sendTestDmAction) {
       notice = await sendTestDmNow({
         slack,
-        runtimeConfig,
+        runtimeConfig: nextRuntimeConfig,
         snapshot,
         viewerUserId
+      });
+    }
+
+    if (actionId === APP_HOME_IDS.sendPublicNowAction) {
+      notice = await sendPublicNow({
+        slack,
+        runtimeConfig: nextRuntimeConfig,
+        snapshot
       });
     }
 
@@ -275,7 +433,7 @@ Deno.serve(async (request) => {
       slack,
       viewerUserId,
       adminUserId,
-      runtimeConfig,
+      runtimeConfig: nextRuntimeConfig,
       ownerMap,
       overdueState,
       viewHash,

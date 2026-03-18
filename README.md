@@ -27,6 +27,12 @@ The bot reads work from a ClickUp list, builds a Slack update grouped into `Due 
   - unchanged-status overdue days
   - current overdue tasks by owner
 - Publishes a private Slack App Home control panel for the admin user
+- Lets the admin Home tab control:
+  - which task properties appear in reminders
+  - whether the public reminder is enabled
+  - which public channel receives it
+  - whether the private `Team Progress Update` DM is enabled
+  - one or more daily send times
 
 ## Repo Layout
 
@@ -128,7 +134,7 @@ npm run supabase:function:deploy:app-home
 
 ### Schedule
 
-The bot is intended to run daily at `9:00 PM IST`.
+The bot now runs on a minute-level cron and checks the configured `schedule.times` list in `public.app_state`. That makes multiple daily send times possible without editing the cron job every time.
 
 The SQL template in [supabase/sql/schedule_daily_task_status.sql](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/sql/schedule_daily_task_status.sql) is safe to commit because it uses placeholders. Fill in the real project URL and cron secret before executing it in the Supabase SQL editor.
 
@@ -141,6 +147,7 @@ Current keys:
 - `runtime_config`
 - `owner_map`
 - `overdue_state`
+- `delivery_state`
 
 ## Required Slack Scopes
 
@@ -172,8 +179,15 @@ Behavior:
 - Yash-only admin view: the configured admin user gets the full control panel
 - Everyone else: they see a locked App Home with no controls
 - Current controls:
+  - choose visible task properties
+  - enable or disable the public reminder
+  - choose the public reminder channel
+  - enable or disable the private `Team Progress Update` DM
+  - edit one or more daily send times
+  - `Save Settings`
   - `Refresh Home`
   - `Send Test DM Now`
+  - `Send Public Message Now`
   - `Open Dev Board`
 
 ## Message Behavior
@@ -189,7 +203,9 @@ Behavior:
 - The Home tab uses live ClickUp data and the same overdue log state as the daily reminder
 - It is private per-user because Slack App Home views are published individually
 - Only the configured admin user gets controls; everyone else sees a restricted view
-- `Send Test DM Now` sends both the reminder and `Team Progress Update` only to the admin user
+- `Send Test DM Now` sends the reminder and, if enabled, `Team Progress Update` only to the admin user
+- `Send Public Message Now` posts the public reminder to the selected channel immediately
+- Saved Home settings directly change future scheduled sends
 
 ## Roadmap
 

@@ -140,3 +140,52 @@ test("buildReminderMessage renders option B as a per-task friendly card layout",
   assert.match(message.text, /    - Blocking: <https:\/\/app.clickup.com\/t\/3\|OPS-99: Prepare legal approval> :no_entry:/);
   assert.match(message.text, /      - Blocking: <https:\/\/app.clickup.com\/t\/2\|OPS-13: Review proposal> :no_entry:/);
 });
+
+test("buildReminderMessage respects the selected task properties", () => {
+  const message = buildReminderMessage({
+    dueToday: [
+      {
+        id: "1",
+        customId: "OPS-12",
+        name: "Send proposal",
+        statusLabel: "In Progress",
+        priorityLabel: "High",
+        priorityOrder: 1,
+        url: "https://app.clickup.com/t/1",
+        ownerMentions: ["<@U123>"],
+        taskPath: [
+          {
+            id: "1",
+            customId: "OPS-12",
+            name: "Send proposal",
+            label: "OPS-12: Send proposal",
+            url: "https://app.clickup.com/t/1",
+            blockingTasks: [
+              {
+                id: "2",
+                customId: "OPS-13",
+                name: "Review proposal",
+                url: "https://app.clickup.com/t/2"
+              }
+            ]
+          }
+        ],
+        dueLabel: "Mar 18",
+        blockingTasks: []
+      }
+    ],
+    overdue: [],
+    runDate: new Date("2026-03-18T12:00:00.000Z"),
+    timeZone: "UTC",
+    sourceLabel: "Dev",
+    sourceUrl: "https://app.clickup.com/90161148770/v/li/901613969789",
+    messageStyle: "option_b",
+    taskProperties: ["status", "owner"]
+  });
+
+  assert.match(message.text, /Status: In Progress/);
+  assert.match(message.text, /Owner: <@U123>/);
+  assert.doesNotMatch(message.text, /Priority:/);
+  assert.doesNotMatch(message.text, /Due:/);
+  assert.doesNotMatch(message.text, /Blocking:/);
+});

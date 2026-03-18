@@ -32,6 +32,7 @@ values
         "sourceUrl": "https://app.clickup.com/90161148770/v/li/901613969789"
       },
       "slack": {
+        "enabled": false,
         "destinationType": "dm",
         "channelId": "#all-alpha",
         "dmEmail": "yash@get-alpha.ai",
@@ -45,10 +46,12 @@ values
       },
       "schedule": {
         "time": "21:00",
+        "times": ["21:00"],
         "timezone": "Asia/Kolkata"
       },
       "includeUnassigned": false,
-      "messageStyle": "option_b"
+      "messageStyle": "option_b",
+      "taskProperties": ["status", "priority", "due", "owner", "blocking"]
     }'::jsonb
   ),
   (
@@ -109,6 +112,13 @@ values
       "lastRunOn": null,
       "tasks": {},
       "owners": {}
+    }'::jsonb
+  ),
+  (
+    'delivery_state',
+    '{
+      "version": 1,
+      "sent": {}
     }'::jsonb
   )
 on conflict (key) do update
