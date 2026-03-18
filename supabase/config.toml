@@ -2,3 +2,6 @@ project_id = "xfcouttxjdftvntbnjcs"
 
 [functions.daily-task-status]
 verify_jwt = false
+
+[functions.slack-app-home]
+verify_jwt = false

@@ -41,7 +41,7 @@ export function buildAdminSummaryMessage({ ownerSummary, totals, runDate, timeZo
     ? `<${sourceUrl}|${escapeSlackText(sourceLabel || "ClickUp source")}>`
     : `*${escapeSlackText(sourceLabel || "ClickUp")}*`;
   const lines = [
-    "*Private Deadline Log*",
+    "*Team Progress Update*",
     `Only visible to you. Snapshot from ${boardLink} at ${formatDate(
       runDate,
       timeZone
@@ -59,7 +59,7 @@ export function buildAdminSummaryMessage({ ownerSummary, totals, runDate, timeZo
       type: "header",
       text: {
         type: "plain_text",
-        text: "Private Deadline Log"
+        text: "Team Progress Update"
       }
     },
     {

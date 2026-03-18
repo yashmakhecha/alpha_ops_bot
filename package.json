@@ -11,6 +11,7 @@
     "test": "node --test",
     "supabase:db:push": "npx supabase db push",
     "supabase:function:deploy": "npx supabase functions deploy daily-task-status --project-ref xfcouttxjdftvntbnjcs",
+    "supabase:function:deploy:app-home": "npx supabase functions deploy slack-app-home --project-ref xfcouttxjdftvntbnjcs",
     "supabase:secrets:set": "npx supabase secrets set --env-file supabase/secrets.env --project-ref xfcouttxjdftvntbnjcs"
   }
 }

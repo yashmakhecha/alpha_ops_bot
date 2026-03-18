@@ -257,4 +257,27 @@ export class SlackClient {
 
     return this.api("chat.postMessage", payload);
   }
+
+  async publishView({ userId, view, hash }) {
+    if (this.dryRun) {
+      return {
+        ok: true,
+        dryRun: true,
+        userId,
+        view,
+        hash: hash || null
+      };
+    }
+
+    const payload = {
+      user_id: userId,
+      view
+    };
+
+    if (hash) {
+      payload.hash = hash;
+    }
+
+    return this.api("views.publish", payload);
+  }
 }

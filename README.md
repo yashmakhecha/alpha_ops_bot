@@ -1,216 +1,201 @@
-# ClickUp to Slack Follow-up Worker
+# Alpha Ops Bot
 
-This project posts a daily Slack reminder for open ClickUp work on one configured list or view. It includes tasks and subtasks, groups them into due-date buckets, and tags owners in Slack when it can resolve them.
+Daily ClickUp-to-Slack follow-up automation for Alpha.
 
-## What it does
+The bot reads work from a ClickUp list, builds a Slack update grouped into `Due Today` and `Overdue`, sends a private manager summary, and keeps overdue history in Supabase.
 
-1. Reads open tasks and subtasks from a specific ClickUp list or view.
-2. Matches each ClickUp assignee to a Slack user using `config/owner-map.json`.
-3. Falls back to Slack email or name lookups if a direct Slack user ID is not provided.
-4. Builds two alert sections: `Due Today` and `Overdue`.
-5. Uses subtasks when they exist, and shows the parent task name as an inline chip.
-6. Posts a single end-of-day message in a Slack channel or DM asking for updates.
-7. Can run once or stay alive and trigger itself every day at a preset local time.
-8. Keeps a private overdue log that tracks missed deadlines, total overdue days, and overdue days where the task status did not change.
-9. Can send that private summary only to an admin DM, such as Yash.
+## Current Production Shape
 
-## Required Slack scopes
+- ClickUp as the task source
+- Slack for delivery
+- Supabase Edge Function for execution
+- Supabase Postgres for runtime state
+- Supabase Cron for daily scheduling
+- GitHub for code history and branching
 
-- `chat:write`
-- `users:read`
-- `users:read.email`
+## What It Does
 
-For direct-message delivery, also add:
+- Pulls open tasks from a configured ClickUp list
+- Supports task, subtask, and sub-subtask hierarchy
+- Shows the full visible task path with indentation
+- Sorts task cards by priority first, then blocking status, then the remaining work
+- Splits updates into `Due Today` and `Overdue`
+- Tags Slack owners using the ClickUp-to-Slack owner map
+- Sends a private admin summary with:
+  - missed deadlines
+  - overdue days logged
+  - unchanged-status overdue days
+  - current overdue tasks by owner
+- Publishes a private Slack App Home control panel for the admin user
 
-- `im:write`
+## Repo Layout
 
-## Required ClickUp access
+- [src/](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/src): shared ClickUp, Slack, formatting, and overdue-log logic
+- [supabase/functions/daily-task-status/index.ts](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/functions/daily-task-status/index.ts): hosted runtime entrypoint
+- [supabase/migrations/](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/migrations): database schema and state migrations
+- [supabase/sql/schedule_daily_task_status.sql](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/sql/schedule_daily_task_status.sql): schedule template
+- [config/owner-map.example.json](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/config/owner-map.example.json): local owner-map template
+- [test/](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/test): automated coverage
 
-- A personal API token with access to the target list or view.
+## Secrets And Config
 
-## Setup
+Tracked files are templates only.
 
-1. Copy [.env.example](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/.env.example) to `.env` and fill in your real values.
-2. Copy [config/owner-map.example.json](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/config/owner-map.example.json) to `config/owner-map.json`.
-3. Update the owner map so each ClickUp person can be resolved to the right Slack user.
+- Use [`.env.example`](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/.env.example) for local worker development
+- Use [supabase/secrets.example.env](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/secrets.example.env) for Edge Function secrets
+- Use [supabase/project.example.env](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/project.example.env) for local project metadata
 
-Suggested mapping shape:
+Real secret files stay local and are ignored:
 
-```json
-{
-  "owners": [
-    {
-      "clickup": {
-        "userId": "123456",
-        "email": "alex@company.com",
-        "name": "Alex Smith"
-      },
-      "slack": {
-        "userId": "U0123456789",
-        "email": "alex@company.com",
-        "displayName": "alex.smith",
-        "realName": "Alex Smith"
-      }
-    }
-  ]
-}
-```
+- `.env`
+- `supabase/secrets.env`
+- `supabase/project.env`
+- `data/overdue-state.json`
 
-For the cleanest tagging, use Slack `userId` whenever possible.
+## Local Development
 
-## Commands
+1. Copy [`.env.example`](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/.env.example) to `.env`
+2. Copy [config/owner-map.example.json](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/config/owner-map.example.json) to `config/owner-map.json`
+3. Fill in the real values
 
-Run one reminder immediately:
+Commands:
 
 ```bash
-npm run once
-```
-
-Preview the Slack message without sending it:
-
-```bash
+npm run test
 npm run dry-run
-```
-
-Keep the worker alive for daily reminders:
-
-```bash
+npm run once
 npm start
 ```
 
-## Configuration
+## Supabase Deployment
 
-The worker reads these environment variables:
+Project ref:
 
-- `CLICKUP_TOKEN`: ClickUp personal API token.
-- `CLICKUP_SOURCE_TYPE`: `list` or `view`.
-- `CLICKUP_SOURCE_ID`: the ClickUp list ID or view ID to inspect.
-- `CLICKUP_SOURCE_URL`: optional direct link to the ClickUp list or board referenced in the intro line.
-- `SLACK_BOT_TOKEN`: Slack bot token.
-- `SLACK_DESTINATION_TYPE`: `channel` or `dm`.
-- `SLACK_CHANNEL_ID`: channel where reminders will be posted when destination type is `channel`.
-  You can use a Slack channel ID such as `C0123456789` or a public channel name such as `#all-alpha`.
-- `SLACK_DM_USER_ID`: target Slack user ID for DM delivery.
-- `SLACK_DM_EMAIL`: target Slack email for DM delivery.
-- `SLACK_DM_NAME`: target Slack display name or real name for DM delivery.
-- `OWNER_MAP_FILE`: local path to the JSON mapping file.
-- `MESSAGE_STYLE`: `option_a` for the compact table layout or `option_b` for the friendlier bullet-and-sub-bullet layout.
-- `OVERDUE_LOG_FILE`: JSON file where overdue history is stored across runs.
-- `ADMIN_DM_ENABLED`: `true` to send the private deadline log to a separate admin DM.
-- `ADMIN_DM_USER_ID`: target Slack user ID for the private admin DM.
-- `ADMIN_DM_EMAIL`: target Slack email for the private admin DM.
-- `ADMIN_DM_NAME`: target Slack name for the private admin DM.
-- `SCHEDULE_TIME`: local reminder time in `HH:MM` 24-hour format.
-- `SCHEDULE_TIMEZONE`: IANA timezone for the schedule, such as `Asia/Kolkata` or `America/New_York`.
-- `INCLUDE_UNASSIGNED`: `true` to include open unassigned tasks in the reminder.
+```text
+xfcouttxjdftvntbnjcs
+```
 
-If you choose `view`, the worker follows whatever that ClickUp view exposes. If subtasks are critical, `list` is the safer default because ClickUp documents explicit subtask expansion on the list tasks endpoint.
+### One-Time Setup
 
-## Alert rules
-
-- Only open ClickUp work is considered.
-- Closed, completed, done, and archived tasks are excluded.
-- Only tasks with a due date are included in the alert.
-- Items due on the current local date go into `Due Today`.
-- Items with due dates before the current local date go into `Overdue`.
-- If a parent task has subtasks, the alert lists the subtasks instead of the parent task.
-- If a task has no subtasks, the task itself is listed.
-- Subtasks display the parent task name in an inline chip.
-- Each listed task includes the mapped Slack owner mention.
-
-## Private overdue log
-
-When `ADMIN_DM_ENABLED=true`, the worker also sends a private summary DM that is separate from the public reminder.
-
-The log tracks:
-
-- `Missed Deadlines`: how many times a task first entered the overdue bucket.
-- `Overdue Days Logged`: total overdue run-days across tasks and owners.
-- `Unchanged-Status Overdue Days`: overdue run-days where the task stayed overdue and the ClickUp status did not change since the previous day.
-
-Counting stops as soon as a task is no longer overdue or is no longer open. If an overdue task changes status, total overdue days continue, but unchanged-status overdue days stop until the task stays in the new status on a later run.
-
-## How daily scheduling works
-
-`npm start` stays alive and schedules the next reminder for the configured time every day.
-
-For production, the more reliable pattern is usually:
-
-- keep `npm run once` as the only command
-- trigger it daily from your hosting platform, cron, GitHub Actions, or a process manager
-
-That avoids duplicate reminders if multiple app instances are running at the same time.
-
-## Deployment
-
-The recommended free deployment path for this repo is:
-
-- Supabase Postgres for state
-- Supabase Edge Function for execution
-- Supabase Cron for the daily trigger
-- GitHub for normal branching and version history
-
-This repo includes:
-
-- [supabase/config.toml](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/config.toml)
-- [supabase/functions/daily-task-status/index.ts](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/functions/daily-task-status/index.ts)
-- [supabase/migrations/20260318234500_alpha_ops_state.sql](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/migrations/20260318234500_alpha_ops_state.sql)
-- [supabase/sql/schedule_daily_task_status.sql](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/sql/schedule_daily_task_status.sql)
-- [supabase/secrets.example.env](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/secrets.example.env)
-- [supabase/project.example.env](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/project.example.env)
-
-Why this path:
-
-- free Supabase gives you one hosted database and Edge Functions
-- the overdue log now fits naturally in Postgres-backed JSON state
-- GitHub still handles code branches and reviews without needing a paid hosting layer
-- Vercel is optional later if you want a separate admin UI
-
-## Supabase Setup
-
-1. Create or open the Supabase project with ref `xfcouttxjdftvntbnjcs`.
-2. Install the Supabase CLI, then run:
+1. Log in to Supabase CLI
 
 ```bash
 npx supabase login
+```
+
+2. Link the repo
+
+```bash
 npx supabase link --project-ref xfcouttxjdftvntbnjcs
 ```
 
-3. Push the database schema:
-
-```bash
-npm run supabase:db:push
-```
-
-4. Set the function secrets from the committed env file:
-
-First copy:
+3. Create local secret files from the templates
 
 ```bash
 cp supabase/secrets.example.env supabase/secrets.env
 cp supabase/project.example.env supabase/project.env
 ```
 
-Then fill in the real values in those local files.
+4. Fill in the real values in those local files
+
+Important Slack values for App Home:
+
+- `SLACK_SIGNING_SECRET`
+- optional `SLACK_APP_HOME_ADMIN_USER_ID`
+
+If `SLACK_APP_HOME_ADMIN_USER_ID` is left blank, the App Home will fall back to the user configured for the private admin summary.
+
+### Deploy
+
+Push database changes:
+
+```bash
+npm run supabase:db:push
+```
+
+Sync Edge Function secrets:
 
 ```bash
 npm run supabase:secrets:set
 ```
 
-5. Deploy the Edge Function:
+Deploy the function:
 
 ```bash
 npm run supabase:function:deploy
+npm run supabase:function:deploy:app-home
 ```
 
-6. In the Supabase dashboard, enable the `pg_cron` and `pg_net` extensions if they are not already enabled.
+### Schedule
 
-7. In the SQL Editor, run [supabase/sql/schedule_daily_task_status.sql](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/sql/schedule_daily_task_status.sql) to create the daily 9:00 PM IST trigger.
+The bot is intended to run daily at `9:00 PM IST`.
 
-8. Manually invoke the function once to confirm the DM output before changing the destination to a shared channel.
+The SQL template in [supabase/sql/schedule_daily_task_status.sql](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/sql/schedule_daily_task_status.sql) is safe to commit because it uses placeholders. Fill in the real project URL and cron secret before executing it in the Supabase SQL editor.
+
+## Runtime State
+
+Supabase stores the bot state in `public.app_state`.
+
+Current keys:
+
+- `runtime_config`
+- `owner_map`
+- `overdue_state`
+
+## Required Slack Scopes
+
+- `chat:write`
+- `users:read`
+- `users:read.email`
+- `im:write` for DM delivery
+
+## Slack App Home Setup
+
+After deploying [supabase/functions/slack-app-home/index.ts](/Users/yashmakhecha/Downloads/Alpha%20Downloads/followup_assistant/supabase/functions/slack-app-home/index.ts):
+
+1. In Slack app settings, enable `App Home`
+2. Set the Home tab as visible
+3. Turn on `Interactivity & Shortcuts`
+4. Set the Request URL to:
+
+```text
+https://xfcouttxjdftvntbnjcs.supabase.co/functions/v1/slack-app-home
+```
+
+5. Turn on `Event Subscriptions`
+6. Set the same Request URL there
+7. Subscribe to the bot event `app_home_opened`
+8. Reinstall the app to the workspace
+
+Behavior:
+
+- Yash-only admin view: the configured admin user gets the full control panel
+- Everyone else: they see a locked App Home with no controls
+- Current controls:
+  - `Refresh Home`
+  - `Send Test DM Now`
+  - `Open Dev Board`
+
+## Message Behavior
+
+- Public reminder title: `Daily Task Status`
+- Private admin summary title: `Team Progress Update`
+- Visible task hierarchy is rendered as nested bullets
+- Blocking lines appear at the task level where the dependency exists
+- Standalone tasks, subtasks, and sub-subtasks are all supported
+
+## App Home Behavior
+
+- The Home tab uses live ClickUp data and the same overdue log state as the daily reminder
+- It is private per-user because Slack App Home views are published individually
+- Only the configured admin user gets controls; everyone else sees a restricted view
+- `Send Test DM Now` sends both the reminder and `Team Progress Update` only to the admin user
+
+## Roadmap
+
+- optional Vercel admin page if a richer web UI becomes useful
 
 ## Notes
 
-- The function uses a shared `CRON_SECRET` header instead of JWT verification for the scheduled trigger.
-- Runtime config, owner mapping, and overdue state are stored in `alpha_ops.app_state`.
-- The existing local Node worker still works, but Supabase is the intended free hosted path.
+- The Slack app icon must still be changed manually in the Slack app settings
+- The existing Node worker is still usable locally, but Supabase is the intended hosted path
