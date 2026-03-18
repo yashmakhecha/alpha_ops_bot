@@ -90,8 +90,26 @@ test("buildAppHomeView renders the admin control panel for the configured viewer
   assert.match(JSON.stringify(view.blocks), /Save Settings/);
   assert.match(JSON.stringify(view.blocks), /Send Test DM Now/);
   assert.match(JSON.stringify(view.blocks), /Send Public Message Now/);
+  assert.match(JSON.stringify(view.blocks), /Show Restricted Preview/);
   assert.match(JSON.stringify(view.blocks), new RegExp(APP_HOME_IDS.taskPropertiesAction));
-  assert.match(JSON.stringify(view.blocks), /Parent task \/ Subtask \/ <https:\/\/example.com\/tasks\/1\|Leaf task>/);
+  assert.match(JSON.stringify(view.blocks), /Parent Task \/ Subtask \/ <https:\/\/example.com\/tasks\/1\|Leaf Task>/);
+});
+
+test("buildAppHomeView can show the restricted view preview to the admin", () => {
+  const view = buildAppHomeView({
+    viewerUserId: "UADMIN",
+    adminUserId: "UADMIN",
+    runtimeConfig,
+    snapshot: createSnapshot(),
+    sourceLabel: "Dev",
+    sourceUrl: "https://example.com/dev-board",
+    showRestrictedPreview: true
+  });
+
+  assert.match(JSON.stringify(view.blocks), /Hide Restricted Preview/);
+  assert.match(JSON.stringify(view.blocks), /Restricted View Preview/);
+  assert.match(JSON.stringify(view.blocks), /reserved for <@UADMIN>/);
+  assert.match(JSON.stringify(view.blocks), /server-side on every Home open and every button click/);
 });
 
 test("buildAppHomeView renders a restricted view for everyone else", () => {

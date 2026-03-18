@@ -132,7 +132,8 @@ async function publishHome({
   overdueState,
   snapshot,
   viewHash,
-  notice
+  notice,
+  showRestrictedPreview = false
 }: {
   slack: SlackClient;
   viewerUserId: string;
@@ -143,6 +144,7 @@ async function publishHome({
   snapshot?: Awaited<ReturnType<typeof buildReminderSnapshot>>;
   viewHash?: string;
   notice?: string;
+  showRestrictedPreview?: boolean;
 }) {
   const nextSnapshot =
     snapshot ||
@@ -168,7 +170,8 @@ async function publishHome({
     sourceUrl: runtimeConfig.clickup.sourceUrl || nextSnapshot.buckets.sourceUrl,
     notice,
     lastLoggedRunOn: overdueState?.lastRunOn ? String(overdueState.lastRunOn) : null,
-    publicChannelId: /^[CGD][A-Z0-9]+$/.test(publicChannelId || "") ? publicChannelId : ""
+    publicChannelId: /^[CGD][A-Z0-9]+$/.test(publicChannelId || "") ? publicChannelId : "",
+    showRestrictedPreview
   });
 
   await slack.publishView({
@@ -387,7 +390,9 @@ Deno.serve(async (request) => {
         APP_HOME_IDS.saveSettingsAction,
         APP_HOME_IDS.refreshHomeAction,
         APP_HOME_IDS.sendTestDmAction,
-        APP_HOME_IDS.sendPublicNowAction
+        APP_HOME_IDS.sendPublicNowAction,
+        APP_HOME_IDS.showRestrictedPreviewAction,
+        APP_HOME_IDS.hideRestrictedPreviewAction
       ].includes(actionId)
     ) {
       return okResponse();
@@ -395,8 +400,15 @@ Deno.serve(async (request) => {
 
     let nextRuntimeConfig = runtimeConfig;
     let notice = "Home refreshed.";
+    let showRestrictedPreview = actionId === APP_HOME_IDS.showRestrictedPreviewAction;
 
-    if (actionId !== APP_HOME_IDS.refreshHomeAction) {
+    if (
+      ![
+        APP_HOME_IDS.refreshHomeAction,
+        APP_HOME_IDS.showRestrictedPreviewAction,
+        APP_HOME_IDS.hideRestrictedPreviewAction
+      ].includes(actionId)
+    ) {
       nextRuntimeConfig = buildRuntimeConfigFromViewState(payload.view?.state?.values || {}, runtimeConfig);
       await saveRuntimeConfig(supabase, nextRuntimeConfig);
       notice = "Settings saved.";
@@ -429,6 +441,15 @@ Deno.serve(async (request) => {
       });
     }
 
+    if (actionId === APP_HOME_IDS.showRestrictedPreviewAction) {
+      notice = "Restricted preview shown below. Only your Slack user ID can see the admin controls.";
+    }
+
+    if (actionId === APP_HOME_IDS.hideRestrictedPreviewAction) {
+      notice = "Restricted preview hidden.";
+      showRestrictedPreview = false;
+    }
+
     await publishHome({
       slack,
       viewerUserId,
@@ -438,7 +459,8 @@ Deno.serve(async (request) => {
       overdueState,
       viewHash,
       notice,
-      snapshot
+      snapshot,
+      showRestrictedPreview
     });
 
     return okResponse();

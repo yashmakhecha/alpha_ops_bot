@@ -43,7 +43,10 @@ function getTaskPathSegments(task) {
 
 function formatBlockingTasks(blockingTasks) {
   return blockingTasks
-    .map((blockedTask) => `<${blockedTask.url}|${escapeSlackText(formatTaskLabel(blockedTask))}>`)
+    .map(
+      (blockedTask) =>
+        `<${blockedTask.url}|${escapeSlackText(toSmartTitleCase(formatTaskLabel(blockedTask)))}>`
+    )
     .join(", ");
 }
 
@@ -98,7 +101,7 @@ function formatParentCell(task) {
   }
 
   return `\`${escapeCodeText(
-    pathSegments.map((segment) => segment.label || formatTaskLabel(segment)).join(" > ")
+    pathSegments.map((segment) => toSmartTitleCase(segment.label || formatTaskLabel(segment))).join(" > ")
   )}\``;
 }
 
@@ -273,6 +276,22 @@ function getPriorityLabel(task) {
   return toSmartTitleCase(label);
 }
 
+function getHierarchyLabel(index) {
+  if (index === 0) {
+    return "Task";
+  }
+
+  if (index === 1) {
+    return "Sub-task";
+  }
+
+  if (index === 2) {
+    return "Sub-sub-task";
+  }
+
+  return `Level ${index + 1} Task`;
+}
+
 function formatFriendlyTaskBlock(task, kind, taskProperties) {
   const pathSegments = getTaskPathSegments(task);
   const statusEmoji = getStatusEmoji(task);
@@ -283,7 +302,10 @@ function formatFriendlyTaskBlock(task, kind, taskProperties) {
     : null;
   const pathLines = pathSegments.map((segment, index) => {
     const indent = "  ".repeat(index);
-    const label = escapeSlackText(segment.label || formatTaskLabel(segment));
+    const hierarchyLabel = getHierarchyLabel(index);
+    const label = escapeSlackText(
+      `${hierarchyLabel}: ${toSmartTitleCase(segment.label || formatTaskLabel(segment))}`
+    );
 
     if (index === 0) {
       return `${indent}- ${statusEmoji} *<${segment.url}|${label}>*`;

@@ -14,7 +14,9 @@ export const APP_HOME_IDS = {
   saveSettingsAction: "save_settings",
   refreshHomeAction: "refresh_home",
   sendTestDmAction: "send_test_dm_now",
-  sendPublicNowAction: "send_public_now"
+  sendPublicNowAction: "send_public_now",
+  showRestrictedPreviewAction: "show_restricted_preview",
+  hideRestrictedPreviewAction: "hide_restricted_preview"
 };
 
 const PROPERTY_LABELS = {
@@ -34,6 +36,36 @@ function escapeSlackText(value) {
 
 function formatTaskLabel(task) {
   return task.customId ? `${task.customId}: ${task.name}` : task.name;
+}
+
+function toSmartTitleCase(value) {
+  return String(value || "")
+    .split(/(\s+)/)
+    .map((token) => {
+      if (/^\s+$/.test(token) || token === "") {
+        return token;
+      }
+
+      return token
+        .split(/([/-])/)
+        .map((part) => {
+          if (part === "/" || part === "-") {
+            return part;
+          }
+
+          if (!/[a-zA-Z]/.test(part)) {
+            return part;
+          }
+
+          if (/[A-Z]/.test(part.slice(1)) || /\d/.test(part)) {
+            return part;
+          }
+
+          return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+        })
+        .join("");
+    })
+    .join("");
 }
 
 function formatDate(date, timeZone) {
@@ -88,11 +120,11 @@ function formatTaskPath(task) {
             customId: task.customId,
             url: task.url
           }
-        ];
+      ];
 
   return segments
     .map((segment, index) => {
-      const label = escapeSlackText(formatTaskLabel(segment));
+      const label = escapeSlackText(toSmartTitleCase(formatTaskLabel(segment)));
 
       if (index === segments.length - 1 && segment.url) {
         return `<${segment.url}|${label}>`;
@@ -158,6 +190,27 @@ function buildRestrictedView(adminUserId) {
   };
 }
 
+function buildRestrictedPreviewBlocks(adminUserId) {
+  const restrictedView = buildRestrictedView(adminUserId);
+
+  return [
+    {
+      type: "divider"
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "*Restricted View Preview*\n" +
+          `This is what everyone except <@${adminUserId}> sees in Alpha Ops Home.\n` +
+          "_Access is enforced server-side on every Home open and every button click by matching the Slack viewer user ID._"
+      }
+    },
+    ...restrictedView.blocks
+  ];
+}
+
 function buildTaskPropertyOptions(selectedProperties) {
   return TASK_PROPERTY_OPTIONS.map((value) => ({
     text: {
@@ -191,7 +244,8 @@ export function buildAppHomeView({
   sourceUrl,
   notice = "",
   lastLoggedRunOn = null,
-  publicChannelId = ""
+  publicChannelId = "",
+  showRestrictedPreview = false
 }) {
   if (!adminUserId || viewerUserId !== adminUserId) {
     return buildRestrictedView(adminUserId);
@@ -414,6 +468,16 @@ export function buildAppHomeView({
             text: "Send Public Message Now"
           },
           action_id: APP_HOME_IDS.sendPublicNowAction
+        },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: showRestrictedPreview ? "Hide Restricted Preview" : "Show Restricted Preview"
+          },
+          action_id: showRestrictedPreview
+            ? APP_HOME_IDS.hideRestrictedPreviewAction
+            : APP_HOME_IDS.showRestrictedPreviewAction
         }
       ]
     },
@@ -439,7 +503,8 @@ export function buildAppHomeView({
       type: "divider"
     },
     buildPreviewBlock("Due Today Preview", snapshot.dueToday, "No tasks due today."),
-    buildPreviewBlock("Overdue Preview", snapshot.overdue, "No overdue tasks.")
+    buildPreviewBlock("Overdue Preview", snapshot.overdue, "No overdue tasks."),
+    ...(showRestrictedPreview ? buildRestrictedPreviewBlocks(adminUserId) : [])
   ];
 
   return {

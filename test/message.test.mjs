@@ -130,15 +130,15 @@ test("buildReminderMessage renders option B as a per-task friendly card layout",
   });
 
   assert.match(message.text, /Due Today \(1\)/);
-  assert.match(message.text, /- :arrow_forward: \*<https:\/\/app.clickup.com\/t\/parent-1\|OPS-1: Pipeline Work>\*/);
-  assert.match(message.text, /  - <https:\/\/app.clickup.com\/t\/mid-1\|OPS-10: Proposal Stream>/);
-  assert.match(message.text, /    - <https:\/\/app.clickup.com\/t\/1\|OPS-12: Send proposal>/);
+  assert.match(message.text, /- :arrow_forward: \*<https:\/\/app.clickup.com\/t\/parent-1\|Task: OPS-1: Pipeline Work>\*/);
+  assert.match(message.text, /  - <https:\/\/app.clickup.com\/t\/mid-1\|Sub-task: OPS-10: Proposal Stream>/);
+  assert.match(message.text, /    - <https:\/\/app.clickup.com\/t\/1\|Sub-sub-task: OPS-12: Send Proposal>/);
   assert.match(message.text, /      - Status: In Progress/);
   assert.match(message.text, /      - Priority: P2 \(High\) :second_place_medal:/);
   assert.match(message.text, /      - Due: Today/);
   assert.match(message.text, /      - Owner: <@U123>/);
-  assert.match(message.text, /    - Blocking: <https:\/\/app.clickup.com\/t\/3\|OPS-99: Prepare legal approval> :no_entry:/);
-  assert.match(message.text, /      - Blocking: <https:\/\/app.clickup.com\/t\/2\|OPS-13: Review proposal> :no_entry:/);
+  assert.match(message.text, /    - Blocking: <https:\/\/app.clickup.com\/t\/3\|OPS-99: Prepare Legal Approval> :no_entry:/);
+  assert.match(message.text, /      - Blocking: <https:\/\/app.clickup.com\/t\/2\|OPS-13: Review Proposal> :no_entry:/);
 });
 
 test("buildReminderMessage respects the selected task properties", () => {
