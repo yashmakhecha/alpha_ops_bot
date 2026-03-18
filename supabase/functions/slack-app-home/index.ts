@@ -2,10 +2,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { buildAdminSummaryMessage } from "../../../src/admin-summary.mjs";
 import { APP_HOME_IDS, buildAppHomeView } from "../../../src/app-home.mjs";
-import { buildReminderMessage, buildReminderSummaryMessage } from "../../../src/message.mjs";
+import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveAdminUserId, resolveDestination } from "../../../src/reminder-delivery.mjs";
-import { postReminderBundle } from "../../../src/reminder-post.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
 import {
   mergeRuntimeConfig,
@@ -203,10 +202,6 @@ async function sendTestDmNow({
   };
   const sourceLabel = snapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId;
   const sourceUrl = runtimeConfig.clickup.sourceUrl || snapshot.buckets.sourceUrl;
-  const summaryMessage = buildReminderSummaryMessage({
-    dueToday: snapshot.dueToday,
-    overdue: snapshot.overdue
-  });
   const reminderMessage = buildReminderMessage({
     dueToday: snapshot.dueToday,
     overdue: snapshot.overdue,
@@ -230,11 +225,10 @@ async function sendTestDmNow({
 
   if (snapshot.dueToday.length > 0 || snapshot.overdue.length > 0) {
     const reminderDestination = await resolveDestination(dmConfig, slack);
-    await postReminderBundle({
-      slack,
+    await slack.postMessage({
       channel: reminderDestination.channel,
-      summaryMessage,
-      detailMessage: reminderMessage
+      text: reminderMessage.text,
+      blocks: reminderMessage.blocks
     });
     reminderNotice = "Reminder DM sent to you.";
   }
@@ -271,10 +265,6 @@ async function sendPublicNow({
 
   const sourceLabel = snapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId;
   const sourceUrl = runtimeConfig.clickup.sourceUrl || snapshot.buckets.sourceUrl;
-  const summaryMessage = buildReminderSummaryMessage({
-    dueToday: snapshot.dueToday,
-    overdue: snapshot.overdue
-  });
   const message = buildReminderMessage({
     dueToday: snapshot.dueToday,
     overdue: snapshot.overdue,
@@ -293,11 +283,10 @@ async function sendPublicNow({
     slack
   );
 
-  await postReminderBundle({
-    slack,
+  await slack.postMessage({
     channel: destination.channel,
-    summaryMessage,
-    detailMessage: message
+    text: message.text,
+    blocks: message.blocks
   });
 
   return `Public message sent to ${destination.label}.`;

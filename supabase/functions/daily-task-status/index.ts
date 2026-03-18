@@ -7,10 +7,9 @@ import {
   markDeliveredForSlot,
   normalizeDeliveryState
 } from "../../../src/delivery-state.mjs";
-import { buildReminderMessage, buildReminderSummaryMessage } from "../../../src/message.mjs";
+import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveDestination } from "../../../src/reminder-delivery.mjs";
-import { postReminderBundle } from "../../../src/reminder-post.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
 import { mergeRuntimeConfig } from "../../../src/runtime-config.mjs";
 import { SlackClient } from "../../../src/slack.mjs";
@@ -151,10 +150,6 @@ Deno.serve(async (request) => {
   });
   const { runDate, buckets, dueToday, overdue, overdueLog } = snapshot;
 
-  const summaryMessage = buildReminderSummaryMessage({
-    dueToday,
-    overdue
-  });
   const message = buildReminderMessage({
     dueToday,
     overdue,
@@ -172,11 +167,10 @@ Deno.serve(async (request) => {
 
   if (runtimeConfig.slack.enabled && (dueToday.length > 0 || overdue.length > 0)) {
     reminderDestination = await resolveDestination(runtimeConfig.slack, slack);
-    reminderResult = await postReminderBundle({
-      slack,
+    reminderResult = await slack.postMessage({
       channel: reminderDestination.channel,
-      summaryMessage,
-      detailMessage: message
+      text: message.text,
+      blocks: message.blocks
     });
     posted = true;
   }
@@ -208,8 +202,7 @@ Deno.serve(async (request) => {
         taskCount: dueToday.length + overdue.length,
         publicReminder: {
           destination: reminderDestination?.label || null,
-          text: summaryMessage.text,
-          threadText: message.text
+          text: message.text
         },
         adminSummary: {
           destination: adminDestination.label,

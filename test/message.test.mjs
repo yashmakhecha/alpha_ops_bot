@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildReminderMessage, buildReminderSummaryMessage } from "../src/message.mjs";
+import { buildReminderMessage } from "../src/message.mjs";
 
 test("buildReminderMessage renders option A as the compact table layout", () => {
   const message = buildReminderMessage({
@@ -188,32 +188,4 @@ test("buildReminderMessage respects the selected task properties", () => {
   assert.doesNotMatch(message.text, /Priority:/);
   assert.doesNotMatch(message.text, /Due:/);
   assert.doesNotMatch(message.text, /Blocking:/);
-});
-
-test("buildReminderSummaryMessage renders total counts and per-owner counts", () => {
-  const summary = buildReminderSummaryMessage({
-    dueToday: [
-      {
-        owners: [{ id: "U1", label: "Yuvraj Jangir" }]
-      },
-      {
-        owners: [{ id: "U1", label: "Yuvraj Jangir" }]
-      },
-      {
-        owners: [{ id: "U2", label: "Anshul Kardam" }]
-      }
-    ],
-    overdue: [
-      {
-        owners: [{ id: "U3", label: "Ankur Sahu" }]
-      }
-    ]
-  });
-
-  assert.match(summary.text, /\*Daily Task Status\*/);
-  assert.match(summary.text, /Total Due Today: 3/);
-  assert.match(summary.text, /- Yuvraj Jangir: 2/);
-  assert.match(summary.text, /- Anshul Kardam: 1/);
-  assert.match(summary.text, /Total Overdue: 1/);
-  assert.match(summary.text, /- Ankur Sahu: 1/);
 });

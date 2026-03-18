@@ -232,15 +232,14 @@ export class SlackClient {
     };
   }
 
-  async postMessage({ channel, text, blocks, threadTs }) {
+  async postMessage({ channel, text, blocks }) {
     if (this.dryRun) {
       return {
         ok: true,
         dryRun: true,
         channel,
         text,
-        blocks,
-        threadTs: threadTs || null
+        blocks
       };
     }
 
@@ -254,10 +253,6 @@ export class SlackClient {
 
     if (blocks) {
       payload.blocks = blocks;
-    }
-
-    if (threadTs) {
-      payload.thread_ts = threadTs;
     }
 
     return this.api("chat.postMessage", payload);
