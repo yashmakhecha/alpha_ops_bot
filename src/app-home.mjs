@@ -265,6 +265,18 @@ export function buildAppHomeView({
   const taskPropertySummary = runtimeConfig.taskProperties
     .map((property) => PROPERTY_LABELS[property])
     .join(", ");
+  const publicSummaryLines = [
+    `*Public Announcement Settings*`,
+    `Status: *${runtimeConfig.slack.enabled ? "Enabled" : "Disabled"}*`,
+    `Channel: *${formatPublicDestinationLabel(runtimeConfig)}*`,
+    `Send times: *${escapeSlackText(scheduleLabel)}*`,
+    `Visible task properties: *${escapeSlackText(taskPropertySummary || "None")}*`
+  ];
+  const privateSummaryLines = [
+    `*Private Announcement Settings*`,
+    `Team Progress Update DM: *${runtimeConfig.adminSummary.enabled ? "Enabled" : "Disabled"}*`,
+    `Recipient: *${formatAdminDestinationLabel(runtimeConfig, adminUserId)}*`
+  ];
 
   const blocks = [
     {
@@ -333,16 +345,7 @@ export function buildAppHomeView({
       type: "section",
       text: {
         type: "mrkdwn",
-        text:
-          `*Message Settings*\n` +
-          `Public announcement: *${runtimeConfig.slack.enabled ? "Enabled" : "Disabled"}* to *${formatPublicDestinationLabel(
-            runtimeConfig
-          )}*\n` +
-          `Private Team Progress DM: *${runtimeConfig.adminSummary.enabled ? "Enabled" : "Disabled"}* to *${formatAdminDestinationLabel(
-            runtimeConfig,
-            adminUserId
-          )}*\n` +
-          `Task properties: *${escapeSlackText(taskPropertySummary || "None")}*`
+        text: publicSummaryLines.join("\n")
       }
     },
     {
@@ -400,6 +403,34 @@ export function buildAppHomeView({
     },
     {
       type: "input",
+      block_id: APP_HOME_IDS.scheduleTimesBlock,
+      optional: true,
+      label: {
+        type: "plain_text",
+        text: "Public send times"
+      },
+      hint: {
+        type: "plain_text",
+        text: `Use HH:MM in ${runtimeConfig.schedule.timezone}, comma-separated for multiple sends. 24:00 is allowed for midnight.`
+      },
+      element: {
+        type: "plain_text_input",
+        action_id: APP_HOME_IDS.scheduleTimesAction,
+        initial_value: formatScheduleTimes(runtimeConfig.schedule.times)
+      }
+    },
+    {
+      type: "divider"
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: privateSummaryLines.join("\n")
+      }
+    },
+    {
+      type: "input",
       block_id: APP_HOME_IDS.adminEnabledBlock,
       optional: true,
       label: {
@@ -413,24 +444,6 @@ export function buildAppHomeView({
         initial_options: runtimeConfig.adminSummary.enabled
           ? [buildToggleOption("Enable private Team Progress Update DM", "admin_enabled")]
           : []
-      }
-    },
-    {
-      type: "input",
-      block_id: APP_HOME_IDS.scheduleTimesBlock,
-      optional: true,
-      label: {
-        type: "plain_text",
-        text: "Public send times"
-      },
-      hint: {
-        type: "plain_text",
-        text: `Use HH:MM in ${runtimeConfig.schedule.timezone}, comma-separated for multiple sends.`
-      },
-      element: {
-        type: "plain_text_input",
-        action_id: APP_HOME_IDS.scheduleTimesAction,
-        initial_value: formatScheduleTimes(runtimeConfig.schedule.times)
       }
     },
     {

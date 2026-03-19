@@ -31,7 +31,19 @@ function asBoolean(value, fallback = false) {
 }
 
 function isValidTime(value) {
-  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(String(value || "").trim());
+  return /^(24:00|([01]\d|2[0-3]):([0-5]\d))$/.test(String(value || "").trim());
+}
+
+function getTimeSortValue(value) {
+  if (value === "24:00") {
+    return 24 * 60;
+  }
+
+  const [hours, minutes] = String(value || "00:00")
+    .split(":")
+    .map((item) => Number(item));
+
+  return hours * 60 + minutes;
 }
 
 export function normalizeScheduleTimes(value, fallback = DEFAULT_SCHEDULE_TIMES) {
@@ -42,13 +54,23 @@ export function normalizeScheduleTimes(value, fallback = DEFAULT_SCHEDULE_TIMES)
         .map((item) => item.trim())
         .filter(Boolean);
 
-  const normalized = [...new Set(values.filter(isValidTime))].sort();
+  const normalized = [...new Set(values.filter(isValidTime))].sort(
+    (left, right) => getTimeSortValue(left) - getTimeSortValue(right)
+  );
 
   return normalized.length > 0 ? normalized : [...fallback];
 }
 
 export function formatScheduleTimes(value, fallback = DEFAULT_SCHEDULE_TIMES) {
   return normalizeScheduleTimes(value, fallback).join(", ");
+}
+
+export function matchesScheduleTime(scheduleTime, currentTime) {
+  if (scheduleTime === currentTime) {
+    return true;
+  }
+
+  return scheduleTime === "24:00" && currentTime === "00:00";
 }
 
 export function normalizeTaskProperties(value, fallback = DEFAULT_TASK_PROPERTIES) {

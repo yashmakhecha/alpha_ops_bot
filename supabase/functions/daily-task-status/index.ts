@@ -11,7 +11,7 @@ import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveDestination } from "../../../src/reminder-delivery.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
-import { mergeRuntimeConfig } from "../../../src/runtime-config.mjs";
+import { matchesScheduleTime, mergeRuntimeConfig } from "../../../src/runtime-config.mjs";
 import { SlackClient } from "../../../src/slack.mjs";
 
 type JsonRecord = Record<string, unknown>;
@@ -115,7 +115,11 @@ Deno.serve(async (request) => {
   const isScheduledInvocation = Boolean(providedCronSecret);
 
   if (isScheduledInvocation && !dryRun && !force) {
-    if (!runtimeConfig.schedule.times.includes(scheduleSlot.timeKey)) {
+    const matchesCurrentSchedule = runtimeConfig.schedule.times.some((scheduleTime) =>
+      matchesScheduleTime(scheduleTime, scheduleSlot.timeKey)
+    );
+
+    if (!matchesCurrentSchedule) {
       return jsonResponse({
         ok: true,
         skipped: true,
