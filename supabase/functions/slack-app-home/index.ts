@@ -102,6 +102,12 @@ function buildRuntimeConfigFromViewState(viewState: Record<string, any>, runtime
         APP_HOME_IDS.publicEnabledAction,
         "public_enabled"
       ),
+      weekendsEnabled: isChecked(
+        viewState,
+        APP_HOME_IDS.publicWeekendsBlock,
+        APP_HOME_IDS.publicWeekendsAction,
+        "public_weekends_enabled"
+      ),
       destinationType: "channel",
       channelId: selectedChannel || runtimeConfig.slack.channelId
     },

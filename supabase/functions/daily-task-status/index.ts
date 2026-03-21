@@ -11,7 +11,11 @@ import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveDestination } from "../../../src/reminder-delivery.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
-import { matchesScheduleTime, mergeRuntimeConfig } from "../../../src/runtime-config.mjs";
+import {
+  isWeekendInTimeZone,
+  matchesScheduleTime,
+  mergeRuntimeConfig
+} from "../../../src/runtime-config.mjs";
 import { SlackClient } from "../../../src/slack.mjs";
 
 type JsonRecord = Record<string, unknown>;
@@ -24,6 +28,7 @@ type RuntimeConfig = {
   };
   slack: {
     enabled: boolean;
+    weekendsEnabled: boolean;
     destinationType: "channel" | "dm";
     channelId?: string | null;
     dmUserId?: string | null;
@@ -168,15 +173,25 @@ Deno.serve(async (request) => {
   let reminderResult: unknown = { ok: true, skipped: true };
   let reminderDestination: { channel: string; label: string } | null = null;
   let posted = false;
+  const isWeekendRun = isWeekendInTimeZone(runDate, runtimeConfig.schedule.timezone);
+  const publicReminderBlockedOnWeekend = isWeekendRun && !runtimeConfig.slack.weekendsEnabled;
 
   if (runtimeConfig.slack.enabled && (dueToday.length > 0 || overdue.length > 0)) {
-    reminderDestination = await resolveDestination(runtimeConfig.slack, slack);
-    reminderResult = await slack.postMessage({
-      channel: reminderDestination.channel,
-      text: message.text,
-      blocks: message.blocks
-    });
-    posted = true;
+    if (publicReminderBlockedOnWeekend) {
+      reminderResult = {
+        ok: true,
+        skipped: true,
+        reason: "weekends_disabled_for_public_reminders"
+      };
+    } else {
+      reminderDestination = await resolveDestination(runtimeConfig.slack, slack);
+      reminderResult = await slack.postMessage({
+        channel: reminderDestination.channel,
+        text: message.text,
+        blocks: message.blocks
+      });
+      posted = true;
+    }
   }
 
   let adminResult: unknown = null;
@@ -206,7 +221,10 @@ Deno.serve(async (request) => {
         taskCount: dueToday.length + overdue.length,
         publicReminder: {
           destination: reminderDestination?.label || null,
-          text: message.text
+          text: message.text,
+          skippedReason: publicReminderBlockedOnWeekend
+            ? "weekends_disabled_for_public_reminders"
+            : null
         },
         adminSummary: {
           destination: adminDestination.label,

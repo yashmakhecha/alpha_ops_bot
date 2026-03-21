@@ -73,6 +73,15 @@ export function matchesScheduleTime(scheduleTime, currentTime) {
   return scheduleTime === "24:00" && currentTime === "00:00";
 }
 
+export function isWeekendInTimeZone(date, timeZone) {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short"
+  }).format(date);
+
+  return weekday === "Sat" || weekday === "Sun";
+}
+
 export function normalizeTaskProperties(value, fallback = DEFAULT_TASK_PROPERTIES) {
   const values = Array.isArray(value)
     ? value
@@ -97,6 +106,7 @@ function derivePublicReminderConfig(slackConfig, fallback) {
         : destinationType === "channel"
           ? true
           : fallback.enabled,
+    weekendsEnabled: asBoolean(slack.weekendsEnabled, fallback.weekendsEnabled),
     destinationType,
     channelId: asString(slack.channelId, fallback.channelId),
     dmUserId: asString(slack.dmUserId, fallback.dmUserId),
@@ -118,6 +128,7 @@ export function defaultRuntimeConfig({ getEnvValue } = {}) {
     },
     slack: {
       enabled: asBoolean(readEnv(getEnvValue, "PUBLIC_REMINDER_ENABLED"), true),
+      weekendsEnabled: asBoolean(readEnv(getEnvValue, "PUBLIC_REMINDER_WEEKENDS_ENABLED"), false),
       destinationType: readEnv(getEnvValue, "SLACK_DESTINATION_TYPE") === "dm" ? "dm" : "channel",
       channelId: asString(readEnv(getEnvValue, "SLACK_CHANNEL_ID"), "#all-alpha"),
       dmUserId: asString(readEnv(getEnvValue, "SLACK_DM_USER_ID")),

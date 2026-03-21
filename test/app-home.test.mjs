@@ -54,6 +54,7 @@ const runtimeConfig = {
   },
   slack: {
     enabled: true,
+    weekendsEnabled: false,
     destinationType: "channel",
     channelId: "C1234567890"
   },
@@ -93,6 +94,8 @@ test("buildAppHomeView renders the admin control panel for the configured viewer
   assert.match(JSON.stringify(view.blocks), /Show Restricted Preview/);
   assert.match(JSON.stringify(view.blocks), /Public Announcement Settings/);
   assert.match(JSON.stringify(view.blocks), /Private Announcement Settings/);
+  assert.match(JSON.stringify(view.blocks), /Weekends: \*Disabled\*/);
+  assert.match(JSON.stringify(view.blocks), /Send public announcements on Saturdays and Sundays/);
   assert.match(JSON.stringify(view.blocks), /24:00 is allowed for midnight/);
   assert.match(JSON.stringify(view.blocks), new RegExp(APP_HOME_IDS.taskPropertiesAction));
   assert.match(JSON.stringify(view.blocks), /Parent Task \/ Subtask \/ <https:\/\/example.com\/tasks\/1\|Leaf Task>/);

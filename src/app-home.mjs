@@ -5,6 +5,8 @@ export const APP_HOME_IDS = {
   taskPropertiesAction: "task_properties_select",
   publicEnabledBlock: "public_enabled_block",
   publicEnabledAction: "public_enabled_toggle",
+  publicWeekendsBlock: "public_weekends_block",
+  publicWeekendsAction: "public_weekends_toggle",
   publicChannelBlock: "public_channel_block",
   publicChannelAction: "public_channel_select",
   adminEnabledBlock: "admin_enabled_block",
@@ -268,6 +270,7 @@ export function buildAppHomeView({
   const publicSummaryLines = [
     `*Public Announcement Settings*`,
     `Status: *${runtimeConfig.slack.enabled ? "Enabled" : "Disabled"}*`,
+    `Weekends: *${runtimeConfig.slack.weekendsEnabled ? "Enabled" : "Disabled"}*`,
     `Channel: *${formatPublicDestinationLabel(runtimeConfig)}*`,
     `Send times: *${escapeSlackText(scheduleLabel)}*`,
     `Visible task properties: *${escapeSlackText(taskPropertySummary || "None")}*`
@@ -381,6 +384,23 @@ export function buildAppHomeView({
         options: [buildToggleOption("Enable public announcement", "public_enabled")],
         initial_options: runtimeConfig.slack.enabled
           ? [buildToggleOption("Enable public announcement", "public_enabled")]
+          : []
+      }
+    },
+    {
+      type: "input",
+      block_id: APP_HOME_IDS.publicWeekendsBlock,
+      optional: true,
+      label: {
+        type: "plain_text",
+        text: "Weekend public announcements"
+      },
+      element: {
+        type: "checkboxes",
+        action_id: APP_HOME_IDS.publicWeekendsAction,
+        options: [buildToggleOption("Send public announcements on Saturdays and Sundays", "public_weekends_enabled")],
+        initial_options: runtimeConfig.slack.weekendsEnabled
+          ? [buildToggleOption("Send public announcements on Saturdays and Sundays", "public_weekends_enabled")]
           : []
       }
     },
