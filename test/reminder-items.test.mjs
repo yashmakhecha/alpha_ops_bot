@@ -66,6 +66,36 @@ test("buildReminderBuckets prefers subtasks over parent tasks and groups by due 
       isSubtask: false,
       parentId: null,
       listName: "Dev"
+    },
+    {
+      id: "eta-task",
+      name: "Need ETA",
+      customId: null,
+      url: "https://app.clickup.com/t/eta-task",
+      statusLabel: "Backlog",
+      assignees: [{ id: "5" }],
+      dueDate: null,
+      priorityLabel: null,
+      priorityOrder: null,
+      dependencies: [],
+      isSubtask: false,
+      parentId: null,
+      listName: "Dev"
+    },
+    {
+      id: "eta-unassigned",
+      name: "Unassigned No ETA",
+      customId: null,
+      url: "https://app.clickup.com/t/eta-unassigned",
+      statusLabel: "Backlog",
+      assignees: [],
+      dueDate: null,
+      priorityLabel: null,
+      priorityOrder: null,
+      dependencies: [],
+      isSubtask: false,
+      parentId: null,
+      listName: "Dev"
     }
   ];
 
@@ -86,6 +116,10 @@ test("buildReminderBuckets prefers subtasks over parent tasks and groups by due 
   assert.deepEqual(
     buckets.overdue.map((item) => item.id),
     ["solo-1"]
+  );
+  assert.deepEqual(
+    buckets.etaPending.map((item) => item.id),
+    ["eta-task"]
   );
 });
 

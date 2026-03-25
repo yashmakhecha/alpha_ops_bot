@@ -253,6 +253,7 @@ async function sendTestDmNow({
   const reminderMessage = buildReminderMessage({
     dueToday: snapshot.dueToday,
     overdue: snapshot.overdue,
+    etaPending: snapshot.etaPending,
     runDate: snapshot.runDate,
     timeZone: runtimeConfig.schedule.timezone,
     sourceLabel,
@@ -269,9 +270,9 @@ async function sendTestDmNow({
     sourceUrl
   });
 
-  let reminderNotice = "No due-today or overdue reminder to send.";
+  let reminderNotice = "No due-today, overdue, or ETA-pending reminder to send.";
 
-  if (snapshot.dueToday.length > 0 || snapshot.overdue.length > 0) {
+  if (snapshot.dueToday.length > 0 || snapshot.overdue.length > 0 || snapshot.etaPending.length > 0) {
     const reminderDestination = await resolveDestination(dmConfig, slack);
     await slack.postMessage({
       channel: reminderDestination.channel,
@@ -307,8 +308,8 @@ async function sendPublicNow({
     return "Choose a public channel before sending.";
   }
 
-  if (snapshot.dueToday.length === 0 && snapshot.overdue.length === 0) {
-    return "No due-today or overdue tasks to post publicly.";
+  if (snapshot.dueToday.length === 0 && snapshot.overdue.length === 0 && snapshot.etaPending.length === 0) {
+    return "No due-today, overdue, or ETA-pending tasks to post publicly.";
   }
 
   const sourceLabel = snapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId;
@@ -320,6 +321,7 @@ async function sendPublicNow({
   const message = buildReminderMessage({
     dueToday: snapshot.dueToday,
     overdue: snapshot.overdue,
+    etaPending: snapshot.etaPending,
     runDate: snapshot.runDate,
     timeZone: runtimeConfig.schedule.timezone,
     sourceLabel,

@@ -136,6 +136,7 @@ export function buildReminderBuckets(
   const todayKey = dateKeyFormatter.format(now);
   const dueToday = [];
   const overdue = [];
+  const etaPending = [];
 
   for (const task of tasks) {
     for (const dependency of task.dependencies || []) {
@@ -160,15 +161,42 @@ export function buildReminderBuckets(
   for (const task of tasks) {
     const dueTimestamp = parseDueTimestamp(task.dueDate);
 
-    if (!dueTimestamp) {
-      continue;
-    }
-
     if (parentIdsWithSubtasks.has(task.id)) {
       continue;
     }
 
     if (task.assignees.length === 0 && !includeUnassigned) {
+      continue;
+    }
+
+    if (!dueTimestamp) {
+      if (task.assignees.length > 0) {
+        const taskPath = buildTaskPath(task, tasksById, blockingMap);
+        const parentTask = taskPath.length > 1
+          ? {
+              name: taskPath[taskPath.length - 2]?.name || null,
+              customId: taskPath[taskPath.length - 2]?.customId || null,
+              url: taskPath[taskPath.length - 2]?.url || null
+            }
+          : null;
+        const blockingTasks = getBlockingTasksForId(blockingMap, task.id);
+
+        etaPending.push({
+          ...task,
+          dueTimestamp: null,
+          dueLabel: null,
+          taskPath,
+          parentName: parentTask?.name || null,
+          parentCustomId: parentTask?.customId || null,
+          parentUrl: parentTask?.url || null,
+          prioritySortRank: getPrioritySortRank(task),
+          hasBlockingInPath: taskPath.some(
+            (segment) => Array.isArray(segment.blockingTasks) && segment.blockingTasks.length > 0
+          ),
+          blockingTasks
+        });
+      }
+
       continue;
     }
 
@@ -208,11 +236,13 @@ export function buildReminderBuckets(
 
   dueToday.sort(sortReminderItems);
   overdue.sort(sortReminderItems);
+  etaPending.sort(sortReminderItems);
 
   return {
     sourceLabel: tasks.find((task) => task.listName)?.listName || null,
     sourceUrl: buildListUrl(tasks[0]?.teamId, tasks[0]?.listId),
     dueToday,
-    overdue
+    overdue,
+    etaPending
   };
 }

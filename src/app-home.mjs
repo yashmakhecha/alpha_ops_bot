@@ -406,6 +406,10 @@ export function buildAppHomeView({
         },
         {
           type: "mrkdwn",
+          text: `*ETA Pending*\n${snapshot.etaPending?.length || 0}`
+        },
+        {
+          type: "mrkdwn",
           text: `*Owners With Overdue*\n${ownersWithOverdue}`
         },
         {
@@ -637,6 +641,11 @@ export function buildAppHomeView({
     },
     buildPreviewBlock("Due Today Preview", snapshot.dueToday, "No tasks due today."),
     buildPreviewBlock("Overdue Preview", snapshot.overdue, "No overdue tasks."),
+    buildPreviewBlock(
+      "ETA Pending Preview",
+      snapshot.etaPending || [],
+      "No assigned tasks are awaiting an ETA."
+    ),
     ...(showRestrictedPreview ? buildRestrictedPreviewBlocks(adminUserId) : [])
   ];
 

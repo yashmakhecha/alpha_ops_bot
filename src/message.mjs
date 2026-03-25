@@ -112,7 +112,12 @@ function formatTaskLine(task, kind, taskProperties) {
       : task.isUnassigned
         ? "_Unassigned_"
         : "_Owner not mapped_";
-  const dueCell = kind === "dueToday" ? "Today" : escapeSlackText(task.dueLabel);
+  const dueCell =
+    kind === "dueToday"
+      ? "Today"
+      : kind === "etaPending"
+        ? "ETA Pending"
+        : escapeSlackText(task.dueLabel);
   const allBlockingTasks = getAllBlockingTasks(task);
   const blockingCell =
     allBlockingTasks.length > 0
@@ -296,7 +301,12 @@ function formatFriendlyTaskBlock(task, kind, taskProperties) {
   const pathSegments = getTaskPathSegments(task);
   const statusEmoji = getStatusEmoji(task);
   const statusLabel = escapeSlackText(toSmartTitleCase(task.statusLabel));
-  const dueLabel = kind === "dueToday" ? "Today" : escapeSlackText(toSmartTitleCase(task.dueLabel));
+  const dueLabel =
+    kind === "dueToday"
+      ? "Today"
+      : kind === "etaPending"
+        ? "ETA Pending"
+        : escapeSlackText(toSmartTitleCase(task.dueLabel));
   const priorityLine = task.priorityLabel
     ? `${"  ".repeat(Math.max(pathSegments.length - 1, 0))}  - Priority: ${getPriorityLabel(task)}${getPriorityEmoji(task) ? ` ${getPriorityEmoji(task)}` : ""}`
     : null;
@@ -424,7 +434,12 @@ function pushCategory({ blocks, lines, title, items, kind, taskProperties }) {
   lines.push(`${title} (${items.length})`);
 
   if (items.length === 0) {
-    const emptyText = kind === "dueToday" ? "_No open tasks due today._" : "_No open overdue tasks._";
+    const emptyText =
+      kind === "dueToday"
+        ? "_No open tasks due today._"
+        : kind === "etaPending"
+          ? "_No assigned tasks are awaiting an ETA._"
+          : "_No open overdue tasks._";
     blocks.push({
       type: "section",
       text: {
@@ -432,7 +447,13 @@ function pushCategory({ blocks, lines, title, items, kind, taskProperties }) {
         text: emptyText
       }
     });
-    lines.push(kind === "dueToday" ? "- No open tasks due today." : "- No open overdue tasks.");
+    lines.push(
+      kind === "dueToday"
+        ? "- No open tasks due today."
+        : kind === "etaPending"
+          ? "- No assigned tasks are awaiting an ETA."
+          : "- No open overdue tasks."
+    );
     lines.push("");
     return;
   }
@@ -490,7 +511,16 @@ function buildHeaderAndIntro({ runDate, timeZone, sourceLabel, sourceUrl }) {
   };
 }
 
-function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl, taskProperties }) {
+function buildOptionAMessage({
+  dueToday,
+  overdue,
+  etaPending,
+  runDate,
+  timeZone,
+  sourceLabel,
+  sourceUrl,
+  taskProperties
+}) {
   const { lines, blocks } = buildHeaderAndIntro({ runDate, timeZone, sourceLabel, sourceUrl });
 
   pushCategory({
@@ -516,6 +546,20 @@ function buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
     taskProperties
   });
 
+  blocks.push({
+    type: "divider"
+  });
+  lines.push("");
+
+  pushCategory({
+    blocks,
+    lines,
+    title: "ETA Pending",
+    items: etaPending,
+    kind: "etaPending",
+    taskProperties
+  });
+
   return {
     text: lines.join("\n").trim(),
     blocks
@@ -535,7 +579,11 @@ function pushFriendlyCategory({ blocks, lines, title, items, kind, taskPropertie
 
   if (items.length === 0) {
     const emptyText =
-      kind === "dueToday" ? "No open tasks due today." : "No open overdue tasks.";
+      kind === "dueToday"
+        ? "No open tasks due today."
+        : kind === "etaPending"
+          ? "No assigned tasks are awaiting an ETA."
+          : "No open overdue tasks.";
     blocks.push({
       type: "section",
       text: {
@@ -562,12 +610,30 @@ function pushFriendlyCategory({ blocks, lines, title, items, kind, taskPropertie
   }
 }
 
-function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl, taskProperties }) {
+function buildOptionBMessage({
+  dueToday,
+  overdue,
+  etaPending,
+  runDate,
+  timeZone,
+  sourceLabel,
+  sourceUrl,
+  taskProperties
+}) {
   const { lines, blocks } = buildHeaderAndIntro({ runDate, timeZone, sourceLabel, sourceUrl });
-  const totalTasks = dueToday.length + overdue.length;
+  const totalTasks = dueToday.length + overdue.length + etaPending.length;
 
   if (totalTasks > 40) {
-    return buildOptionAMessage({ dueToday, overdue, runDate, timeZone, sourceLabel, sourceUrl, taskProperties });
+    return buildOptionAMessage({
+      dueToday,
+      overdue,
+      etaPending,
+      runDate,
+      timeZone,
+      sourceLabel,
+      sourceUrl,
+      taskProperties
+    });
   }
 
   pushFriendlyCategory({
@@ -593,6 +659,20 @@ function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
     taskProperties
   });
 
+  blocks.push({
+    type: "divider"
+  });
+  lines.push("");
+
+  pushFriendlyCategory({
+    blocks,
+    lines,
+    title: "ETA Pending",
+    items: etaPending,
+    kind: "etaPending",
+    taskProperties
+  });
+
   return {
     text: lines.join("\n").trim(),
     blocks
@@ -602,6 +682,7 @@ function buildOptionBMessage({ dueToday, overdue, runDate, timeZone, sourceLabel
 export function buildReminderMessage({
   dueToday,
   overdue,
+  etaPending = [],
   runDate,
   timeZone,
   sourceLabel,
@@ -615,6 +696,7 @@ export function buildReminderMessage({
     return buildOptionAMessage({
       dueToday,
       overdue,
+      etaPending,
       runDate,
       timeZone,
       sourceLabel,
@@ -626,6 +708,7 @@ export function buildReminderMessage({
   return buildOptionBMessage({
     dueToday,
     overdue,
+    etaPending,
     runDate,
     timeZone,
     sourceLabel,

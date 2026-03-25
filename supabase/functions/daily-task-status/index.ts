@@ -158,11 +158,12 @@ Deno.serve(async (request) => {
     slack,
     now: new Date()
   });
-  const { runDate, buckets, dueToday, overdue, overdueLog } = snapshot;
+  const { runDate, buckets, dueToday, overdue, etaPending, overdueLog } = snapshot;
 
   const message = buildReminderMessage({
     dueToday,
     overdue,
+    etaPending,
     runDate,
     timeZone: runtimeConfig.schedule.timezone,
     sourceLabel: buckets.sourceLabel || runtimeConfig.clickup.sourceId,
@@ -181,7 +182,7 @@ Deno.serve(async (request) => {
   const isWeekendRun = isWeekendInTimeZone(runDate, runtimeConfig.schedule.timezone);
   const publicReminderBlockedOnWeekend = isWeekendRun && !runtimeConfig.slack.weekendsEnabled;
 
-  if (runtimeConfig.slack.enabled && (dueToday.length > 0 || overdue.length > 0)) {
+  if (runtimeConfig.slack.enabled && (dueToday.length > 0 || overdue.length > 0 || etaPending.length > 0)) {
     if (publicReminderBlockedOnWeekend) {
       reminderResult = {
         ok: true,
@@ -227,7 +228,7 @@ Deno.serve(async (request) => {
       return jsonResponse({
         ok: true,
         dryRun: true,
-        taskCount: dueToday.length + overdue.length,
+        taskCount: dueToday.length + overdue.length + etaPending.length,
         publicReminder: {
           destination: reminderDestination?.label || null,
           text: message.text,
@@ -276,7 +277,7 @@ Deno.serve(async (request) => {
   return jsonResponse({
     ok: true,
     posted,
-    taskCount: dueToday.length + overdue.length,
+    taskCount: dueToday.length + overdue.length + etaPending.length,
     reminderDestination: reminderDestination?.label || null,
     adminDestination: adminDestination?.label || null,
     reminderResult,

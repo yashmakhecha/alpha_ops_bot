@@ -26,6 +26,18 @@ function createSnapshot() {
         ]
       }
     ],
+    etaPending: [
+      {
+        name: "Await ETA",
+        url: "https://example.com/tasks/eta-1",
+        taskPath: [
+          {
+            name: "Await ETA",
+            url: "https://example.com/tasks/eta-1"
+          }
+        ]
+      }
+    ],
     overdue: [],
     overdueLog: {
       ownerSummary: [
@@ -137,6 +149,8 @@ test("buildAppHomeView renders the admin control panel for the configured viewer
   assert.match(JSON.stringify(view.blocks), /Show Restricted Preview/);
   assert.match(JSON.stringify(view.blocks), /Public Announcement Settings/);
   assert.match(JSON.stringify(view.blocks), /Private Announcement Settings/);
+  assert.match(JSON.stringify(view.blocks), /\*ETA Pending\*\\n1/);
+  assert.match(JSON.stringify(view.blocks), /ETA Pending Preview/);
   assert.match(JSON.stringify(view.blocks), /Tracked Lists: \*Dev, Bugs\*/);
   assert.match(JSON.stringify(view.blocks), /ClickUp lists to include in daily updates/);
   assert.match(JSON.stringify(view.blocks), /Alpha \/ Engineering \/ Sprint 17/);

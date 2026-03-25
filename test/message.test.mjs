@@ -45,6 +45,29 @@ test("buildReminderMessage renders option A as the compact table layout", () => 
         ]
       }
     ],
+    etaPending: [
+      {
+        id: "eta-1",
+        customId: "OPS-20",
+        name: "Add ETA",
+        statusLabel: "Backlog",
+        priorityLabel: null,
+        priorityOrder: null,
+        url: "https://app.clickup.com/t/eta-1",
+        ownerMentions: ["<@U456>"],
+        taskPath: [
+          {
+            id: "eta-1",
+            customId: "OPS-20",
+            name: "Add ETA",
+            label: "OPS-20: Add ETA",
+            url: "https://app.clickup.com/t/eta-1"
+          }
+        ],
+        dueLabel: null,
+        blockingTasks: []
+      }
+    ],
     overdue: [],
     runDate: new Date("2026-03-18T12:00:00.000Z"),
     timeZone: "UTC",
@@ -56,9 +79,11 @@ test("buildReminderMessage renders option A as the compact table layout", () => 
   assert.match(message.text, /\*Daily Task Status\*/);
   assert.match(message.text, /<https:\/\/app\.clickup\.com\/90161148770\/v\/li\/901613969789\|Dev>/);
   assert.match(message.text, /Due Today \(1\)/);
+  assert.match(message.text, /ETA Pending \(1\)/);
   assert.match(message.text, /\*Parent\* \| \*Task\* \| \*Status\* \| \*Priority\* \| \*Due\* \| \*Owner\* \| \*Blocking\*/);
   assert.match(message.text, /<https:\/\/app.clickup.com\/t\/1\|OPS-12: Send Proposal>/);
   assert.match(message.text, /`OPS-1: Pipeline Work` \| <https:\/\/app.clickup.com\/t\/1\|OPS-12: Send Proposal> \| In Progress \| High \| Today \| <@U123> \| <https:\/\/app.clickup.com\/t\/2\|OPS-13: Review Proposal>/);
+  assert.match(message.text, /- \| <https:\/\/app.clickup.com\/t\/eta-1\|OPS-20: Add ETA> \| Backlog \| - \| ETA Pending \| <@U456> \| -/);
   assert.equal(message.blocks[0].type, "header");
 });
 
@@ -121,6 +146,30 @@ test("buildReminderMessage renders option B as a per-task friendly card layout",
         blockingTasks: []
       }
     ],
+    etaPending: [
+      {
+        id: "eta-1",
+        customId: "OPS-20",
+        name: "Add ETA",
+        statusLabel: "Backlog",
+        priorityLabel: null,
+        priorityOrder: null,
+        url: "https://app.clickup.com/t/eta-1",
+        ownerMentions: ["<@U456>"],
+        taskPath: [
+          {
+            id: "eta-1",
+            customId: "OPS-20",
+            name: "Add ETA",
+            label: "OPS-20: Add ETA",
+            url: "https://app.clickup.com/t/eta-1",
+            blockingTasks: []
+          }
+        ],
+        dueLabel: null,
+        blockingTasks: []
+      }
+    ],
     overdue: [],
     runDate: new Date("2026-03-18T12:00:00.000Z"),
     timeZone: "UTC",
@@ -130,6 +179,7 @@ test("buildReminderMessage renders option B as a per-task friendly card layout",
   });
 
   assert.match(message.text, /Due Today \(1\)/);
+  assert.match(message.text, /ETA Pending \(1\)/);
   assert.match(message.text, /- :arrow_forward: Task: \*<https:\/\/app.clickup.com\/t\/parent-1\|OPS-1: Pipeline Work>\*/);
   assert.match(message.text, /  - Sub-task: <https:\/\/app.clickup.com\/t\/mid-1\|OPS-10: Proposal Stream>/);
   assert.match(message.text, /    - Sub-sub-task: <https:\/\/app.clickup.com\/t\/1\|OPS-12: Send Proposal>/);
@@ -139,6 +189,8 @@ test("buildReminderMessage renders option B as a per-task friendly card layout",
   assert.match(message.text, /      - Owner: <@U123>/);
   assert.match(message.text, /    - Blocking: <https:\/\/app.clickup.com\/t\/3\|OPS-99: Prepare Legal Approval> :no_entry:/);
   assert.match(message.text, /      - Blocking: <https:\/\/app.clickup.com\/t\/2\|OPS-13: Review Proposal> :no_entry:/);
+  assert.match(message.text, /- :card_index_dividers: Task: \*<https:\/\/app.clickup.com\/t\/eta-1\|OPS-20: Add ETA>\*/);
+  assert.match(message.text, /  - Due: ETA Pending/);
 });
 
 test("buildReminderMessage respects the selected task properties", () => {
@@ -174,6 +226,7 @@ test("buildReminderMessage respects the selected task properties", () => {
         blockingTasks: []
       }
     ],
+    etaPending: [],
     overdue: [],
     runDate: new Date("2026-03-18T12:00:00.000Z"),
     timeZone: "UTC",

@@ -45,9 +45,10 @@ export async function buildReminderSnapshot({
   };
   const dueToday = await resolveReminderItems(buckets.dueToday, ownerMap, slack);
   const overdue = await resolveReminderItems(buckets.overdue, ownerMap, slack);
+  const etaPending = await resolveReminderItems(buckets.etaPending, ownerMap, slack);
   const overdueLog = updateOverdueState({
     state: overdueState,
-    trackedItems: [...dueToday, ...overdue],
+    trackedItems: [...dueToday, ...overdue, ...etaPending],
     overdueItems: overdue,
     timeZone: runtimeConfig.schedule.timezone,
     now
@@ -58,6 +59,7 @@ export async function buildReminderSnapshot({
     buckets,
     dueToday,
     overdue,
+    etaPending,
     overdueLog
   };
 }

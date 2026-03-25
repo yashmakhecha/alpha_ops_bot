@@ -94,21 +94,23 @@ export async function runReminder(config) {
   });
   const dueToday = await resolveReminderItems(buckets.dueToday, ownerMap, slack);
   const overdue = await resolveReminderItems(buckets.overdue, ownerMap, slack);
+  const etaPending = await resolveReminderItems(buckets.etaPending, ownerMap, slack);
   const overdueLog = updateOverdueLog({
     filePath: config.overdueLogPath,
-    trackedItems: [...dueToday, ...overdue],
+    trackedItems: [...dueToday, ...overdue, ...etaPending],
     overdueItems: overdue,
     timeZone: config.schedule.timezone,
     now: runDate
   });
 
-  if (dueToday.length === 0 && overdue.length === 0) {
+  if (dueToday.length === 0 && overdue.length === 0 && etaPending.length === 0) {
     console.log("No open ClickUp tasks matched the reminder criteria.");
   }
 
   const message = buildReminderMessage({
     dueToday,
     overdue,
+    etaPending,
     runDate,
     timeZone: config.schedule.timezone,
     sourceLabel: buckets.sourceLabel || config.clickup.sourceId,
@@ -121,7 +123,7 @@ export async function runReminder(config) {
     skipped: true
   };
 
-  if (dueToday.length > 0 || overdue.length > 0) {
+  if (dueToday.length > 0 || overdue.length > 0 || etaPending.length > 0) {
     result = await slack.postMessage({
       channel: destination.channel,
       text: message.text,
@@ -159,15 +161,15 @@ export async function runReminder(config) {
   if (config.dryRun) {
     console.log("Dry run only. Slack message preview:\n");
     console.log(message.text);
-  } else if (dueToday.length > 0 || overdue.length > 0) {
+  } else if (dueToday.length > 0 || overdue.length > 0 || etaPending.length > 0) {
     console.log(`Slack reminder posted to ${destination.label}.`);
   } else {
-    console.log("No public reminder sent because there are no due-today or overdue tasks.");
+    console.log("No public reminder sent because there are no due-today, overdue, or ETA-pending tasks.");
   }
 
   return {
-    posted: dueToday.length > 0 || overdue.length > 0,
-    taskCount: dueToday.length + overdue.length,
+    posted: dueToday.length > 0 || overdue.length > 0 || etaPending.length > 0,
+    taskCount: dueToday.length + overdue.length + etaPending.length,
     result,
     adminResult,
     overdueLog
