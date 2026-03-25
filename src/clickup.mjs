@@ -26,6 +26,19 @@ function buildTasksUrl({ baseUrl, sourceType, sourceId, page }) {
   return url;
 }
 
+function buildCollectionUrl(baseUrl, pathSegments, searchParams = {}) {
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const url = new URL(pathSegments.join("/"), normalizedBaseUrl);
+
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (value != null && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  return url;
+}
+
 function getTasksFromResponse(payload) {
   if (Array.isArray(payload)) {
     return payload;
@@ -33,6 +46,18 @@ function getTasksFromResponse(payload) {
 
   if (Array.isArray(payload?.tasks)) {
     return payload.tasks;
+  }
+
+  return [];
+}
+
+function getCollectionItems(payload, key) {
+  if (Array.isArray(payload?.[key])) {
+    return payload[key];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload;
   }
 
   return [];
@@ -87,6 +112,55 @@ function normalizeTask(task) {
   };
 }
 
+function buildListUrl(teamId, listId) {
+  if (!teamId || !listId) {
+    return "";
+  }
+
+  return `https://app.clickup.com/${teamId}/v/li/${listId}`;
+}
+
+function normalizeList({ team, space, folder = null, list }) {
+  const teamId = team?.id ? String(team.id) : "";
+  const teamName = team?.name || "";
+  const spaceId = space?.id ? String(space.id) : "";
+  const spaceName = space?.name || "";
+  const folderId = folder?.id ? String(folder.id) : "";
+  const folderName = folder?.name || "";
+  const id = list?.id ? String(list.id) : "";
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    sourceType: "list",
+    name: list?.name || "Untitled list",
+    teamId,
+    teamName,
+    spaceId,
+    spaceName,
+    folderId,
+    folderName,
+    url: buildListUrl(teamId, id)
+  };
+}
+
+function sortAccessibleLists(left, right) {
+  return [
+    left.teamName.localeCompare(right.teamName),
+    left.spaceName.localeCompare(right.spaceName),
+    left.folderName.localeCompare(right.folderName),
+    left.name.localeCompare(right.name)
+  ].find((value) => value !== 0) || 0;
+}
+
+async function fetchJsonCollection(url, headers, key) {
+  const payload = await jsonRequest(url, { headers });
+  return getCollectionItems(payload, key);
+}
+
 export async function fetchOpenTasks(config) {
   const headers = {
     Authorization: config.token,
@@ -115,4 +189,83 @@ export async function fetchOpenTasks(config) {
   }
 
   return tasks.filter(isTaskOpen).map(normalizeTask);
+}
+
+export async function fetchOpenTasksForSources({ baseUrl, token, sources }) {
+  const normalizedSources = Array.isArray(sources) ? sources.filter((source) => source?.id) : [];
+  const allTasks = await Promise.all(
+    normalizedSources.map((source) =>
+      fetchOpenTasks({
+        baseUrl,
+        token,
+        sourceType: source.sourceType === "view" ? "view" : "list",
+        sourceId: source.id
+      })
+    )
+  );
+  const dedupedTasks = new Map();
+
+  for (const task of allTasks.flat()) {
+    dedupedTasks.set(task.id, task);
+  }
+
+  return [...dedupedTasks.values()];
+}
+
+export async function fetchAccessibleLists({ baseUrl, token }) {
+  const headers = {
+    Authorization: token,
+    "Content-Type": "application/json"
+  };
+  const teams = await fetchJsonCollection(buildCollectionUrl(baseUrl, ["team"]), headers, "teams");
+  const allLists = [];
+
+  for (const team of teams) {
+    const spaces = await fetchJsonCollection(
+      buildCollectionUrl(baseUrl, ["team", String(team.id), "space"], { archived: "false" }),
+      headers,
+      "spaces"
+    );
+
+    for (const space of spaces) {
+      const [folderlessLists, folders] = await Promise.all([
+        fetchJsonCollection(
+          buildCollectionUrl(baseUrl, ["space", String(space.id), "list"], { archived: "false" }),
+          headers,
+          "lists"
+        ),
+        fetchJsonCollection(
+          buildCollectionUrl(baseUrl, ["space", String(space.id), "folder"], { archived: "false" }),
+          headers,
+          "folders"
+        )
+      ]);
+
+      for (const list of folderlessLists) {
+        const normalizedList = normalizeList({ team, space, list });
+
+        if (normalizedList) {
+          allLists.push(normalizedList);
+        }
+      }
+
+      for (const folder of folders) {
+        const folderLists = await fetchJsonCollection(
+          buildCollectionUrl(baseUrl, ["folder", String(folder.id), "list"], { archived: "false" }),
+          headers,
+          "lists"
+        );
+
+        for (const list of folderLists) {
+          const normalizedList = normalizeList({ team, space, folder, list });
+
+          if (normalizedList) {
+            allLists.push(normalizedList);
+          }
+        }
+      }
+    }
+  }
+
+  return [...new Map(allLists.map((list) => [list.id, list])).values()].sort(sortAccessibleLists);
 }

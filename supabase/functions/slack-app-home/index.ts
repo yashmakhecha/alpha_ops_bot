@@ -2,11 +2,13 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { buildAdminSummaryMessage } from "../../../src/admin-summary.mjs";
 import { APP_HOME_IDS, buildAppHomeView } from "../../../src/app-home.mjs";
+import { fetchAccessibleLists } from "../../../src/clickup.mjs";
 import { buildReminderMessage } from "../../../src/message.mjs";
 import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveAdminUserId, resolveDestination } from "../../../src/reminder-delivery.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
 import {
+  getTrackedClickupSources,
   mergeRuntimeConfig,
   normalizeScheduleTimes,
   normalizeTaskProperties
@@ -80,7 +82,23 @@ function isChecked(viewState: Record<string, any>, blockId: string, actionId: st
   return selected.some((option: any) => option?.value === value);
 }
 
-function buildRuntimeConfigFromViewState(viewState: Record<string, any>, runtimeConfig: any) {
+function buildRuntimeConfigFromViewState(
+  viewState: Record<string, any>,
+  runtimeConfig: any,
+  clickupLists: any[]
+) {
+  const selectedListOptions = getStateEntry(
+    viewState,
+    APP_HOME_IDS.trackedListsBlock,
+    APP_HOME_IDS.trackedListsAction
+  )?.selected_options;
+  const selectedListIds = Array.isArray(selectedListOptions)
+    ? selectedListOptions.map((option: any) => String(option.value))
+    : getTrackedClickupSources(runtimeConfig.clickup).map((source) => source.id);
+  const clickupListMap = new Map((clickupLists || []).map((list) => [list.id, list]));
+  const selectedClickupSources = selectedListIds
+    .map((listId) => clickupListMap.get(listId))
+    .filter(Boolean);
   const selectedProperties =
     getStateEntry(viewState, APP_HOME_IDS.taskPropertiesBlock, APP_HOME_IDS.taskPropertiesAction)?.selected_options?.map(
       (option: any) => option.value
@@ -94,6 +112,13 @@ function buildRuntimeConfigFromViewState(viewState: Record<string, any>, runtime
 
   return mergeRuntimeConfig({
     ...runtimeConfig,
+    clickup: {
+      ...runtimeConfig.clickup,
+      sourceType: "list",
+      sourceId: selectedClickupSources[0]?.id || "",
+      sourceUrl: selectedClickupSources[0]?.url || "",
+      sources: selectedClickupSources
+    },
     slack: {
       ...runtimeConfig.slack,
       enabled: isChecked(
@@ -136,6 +161,7 @@ async function publishHome({
   runtimeConfig,
   ownerMap,
   overdueState,
+  clickupLists,
   snapshot,
   viewHash,
   notice,
@@ -147,6 +173,7 @@ async function publishHome({
   runtimeConfig: any;
   ownerMap: any[];
   overdueState: JsonRecord | undefined;
+  clickupLists?: any[];
   snapshot?: Awaited<ReturnType<typeof buildReminderSnapshot>>;
   viewHash?: string;
   notice?: string;
@@ -163,6 +190,12 @@ async function publishHome({
       slack,
       now: new Date()
     }));
+  const nextClickupLists =
+    clickupLists ||
+    (await fetchAccessibleLists({
+      baseUrl: Deno.env.get("CLICKUP_BASE_URL") || "https://api.clickup.com/api/v2",
+      token: Deno.env.get("CLICKUP_TOKEN") || ""
+    }));
   const publicChannelId =
     runtimeConfig.slack.destinationType === "channel" && runtimeConfig.slack.channelId
       ? await slack.resolveChannelId(runtimeConfig.slack.channelId)
@@ -172,8 +205,13 @@ async function publishHome({
     adminUserId,
     runtimeConfig,
     snapshot: nextSnapshot,
+    clickupLists: nextClickupLists,
     sourceLabel: nextSnapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId,
-    sourceUrl: runtimeConfig.clickup.sourceUrl || nextSnapshot.buckets.sourceUrl,
+    sourceUrl:
+      nextSnapshot.buckets.sourceUrl ||
+      (getTrackedClickupSources(runtimeConfig.clickup).length === 1
+        ? runtimeConfig.clickup.sourceUrl
+        : null),
     notice,
     lastLoggedRunOn: overdueState?.lastRunOn ? String(overdueState.lastRunOn) : null,
     publicChannelId: /^[CGD][A-Z0-9]+$/.test(publicChannelId || "") ? publicChannelId : "",
@@ -207,7 +245,11 @@ async function sendTestDmNow({
     dmName: ""
   };
   const sourceLabel = snapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId;
-  const sourceUrl = runtimeConfig.clickup.sourceUrl || snapshot.buckets.sourceUrl;
+  const sourceUrl =
+    snapshot.buckets.sourceUrl ||
+    (getTrackedClickupSources(runtimeConfig.clickup).length === 1
+      ? runtimeConfig.clickup.sourceUrl
+      : null);
   const reminderMessage = buildReminderMessage({
     dueToday: snapshot.dueToday,
     overdue: snapshot.overdue,
@@ -270,7 +312,11 @@ async function sendPublicNow({
   }
 
   const sourceLabel = snapshot.buckets.sourceLabel || runtimeConfig.clickup.sourceId;
-  const sourceUrl = runtimeConfig.clickup.sourceUrl || snapshot.buckets.sourceUrl;
+  const sourceUrl =
+    snapshot.buckets.sourceUrl ||
+    (getTrackedClickupSources(runtimeConfig.clickup).length === 1
+      ? runtimeConfig.clickup.sourceUrl
+      : null);
   const message = buildReminderMessage({
     dueToday: snapshot.dueToday,
     overdue: snapshot.overdue,
@@ -339,6 +385,11 @@ Deno.serve(async (request) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
   const { runtimeConfig, ownerMap, overdueState } = await loadState(supabase);
+  const clickupBaseUrl = Deno.env.get("CLICKUP_BASE_URL") || "https://api.clickup.com/api/v2";
+  const clickupLists = await fetchAccessibleLists({
+    baseUrl: clickupBaseUrl,
+    token: clickupToken
+  });
   const slack = new SlackClient({
     baseUrl: Deno.env.get("SLACK_BASE_URL") || "https://slack.com/api",
     botToken: slackBotToken
@@ -364,7 +415,8 @@ Deno.serve(async (request) => {
       adminUserId,
       runtimeConfig,
       ownerMap,
-      overdueState
+      overdueState,
+      clickupLists
     });
 
     return okResponse();
@@ -415,7 +467,11 @@ Deno.serve(async (request) => {
         APP_HOME_IDS.hideRestrictedPreviewAction
       ].includes(actionId)
     ) {
-      nextRuntimeConfig = buildRuntimeConfigFromViewState(payload.view?.state?.values || {}, runtimeConfig);
+      nextRuntimeConfig = buildRuntimeConfigFromViewState(
+        payload.view?.state?.values || {},
+        runtimeConfig,
+        clickupLists
+      );
       await saveRuntimeConfig(supabase, nextRuntimeConfig);
       notice = "Settings saved.";
     }
@@ -463,6 +519,7 @@ Deno.serve(async (request) => {
       runtimeConfig: nextRuntimeConfig,
       ownerMap,
       overdueState,
+      clickupLists,
       viewHash,
       notice,
       snapshot,

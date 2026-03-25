@@ -1,6 +1,12 @@
-import { formatScheduleTimes, TASK_PROPERTY_OPTIONS } from "./runtime-config.mjs";
+import {
+  formatScheduleTimes,
+  getTrackedClickupSources,
+  TASK_PROPERTY_OPTIONS
+} from "./runtime-config.mjs";
 
 export const APP_HOME_IDS = {
+  trackedListsBlock: "tracked_lists_block",
+  trackedListsAction: "tracked_lists_select",
   taskPropertiesBlock: "task_properties_block",
   taskPropertiesAction: "task_properties_select",
   publicEnabledBlock: "public_enabled_block",
@@ -237,11 +243,84 @@ function buildToggleOption(label, value) {
   };
 }
 
+function formatClickupListGroupLabel(list) {
+  const parts = [];
+
+  if (list.teamName) {
+    parts.push(list.teamName);
+  }
+
+  if (list.spaceName) {
+    parts.push(list.spaceName);
+  }
+
+  if (list.folderName) {
+    parts.push(list.folderName);
+  }
+
+  return parts.join(" / ") || "Other Lists";
+}
+
+function buildClickupListOption(source) {
+  return {
+    text: {
+      type: "plain_text",
+      text: source.name || source.id
+    },
+    value: source.id
+  };
+}
+
+function buildClickupListOptionGroups(clickupLists) {
+  const groups = new Map();
+
+  for (const list of clickupLists) {
+    const groupLabel = formatClickupListGroupLabel(list);
+
+    if (!groups.has(groupLabel)) {
+      groups.set(groupLabel, []);
+    }
+
+    groups.get(groupLabel).push(buildClickupListOption(list));
+  }
+
+  return [...groups.entries()]
+    .sort(([leftLabel], [rightLabel]) => leftLabel.localeCompare(rightLabel))
+    .map(([label, options]) => ({
+      label: {
+        type: "plain_text",
+        text: label
+      },
+      options: options.sort((left, right) => left.text.text.localeCompare(right.text.text))
+    }));
+}
+
+function buildClickupListInitialOptions(selectedSources, clickupLists) {
+  const clickupListMap = new Map((clickupLists || []).map((list) => [list.id, list]));
+
+  return selectedSources.map((source) => buildClickupListOption(clickupListMap.get(source.id) || source));
+}
+
+function formatTrackedClickupLists(selectedSources) {
+  if (selectedSources.length === 0) {
+    return "None Selected";
+  }
+
+  const preview = selectedSources.slice(0, 3).map((source) => source.name || source.id);
+
+  if (selectedSources.length > preview.length) {
+    preview.push(`+${selectedSources.length - preview.length} More`);
+  }
+
+  return preview.join(", ");
+}
+
 export function buildAppHomeView({
   viewerUserId,
   adminUserId,
   runtimeConfig,
   snapshot,
+  clickupLists = [],
   sourceLabel,
   sourceUrl,
   notice = "",
@@ -267,10 +346,12 @@ export function buildAppHomeView({
   const taskPropertySummary = runtimeConfig.taskProperties
     .map((property) => PROPERTY_LABELS[property])
     .join(", ");
+  const trackedClickupSources = getTrackedClickupSources(runtimeConfig.clickup);
   const publicSummaryLines = [
     `*Public Announcement Settings*`,
     `Status: *${runtimeConfig.slack.enabled ? "Enabled" : "Disabled"}*`,
     `Weekends: *${runtimeConfig.slack.weekendsEnabled ? "Enabled" : "Disabled"}*`,
+    `Tracked Lists: *${escapeSlackText(formatTrackedClickupLists(trackedClickupSources))}*`,
     `Channel: *${formatPublicDestinationLabel(runtimeConfig)}*`,
     `Send times: *${escapeSlackText(scheduleLabel)}*`,
     `Visible task properties: *${escapeSlackText(taskPropertySummary || "None")}*`
@@ -349,6 +430,25 @@ export function buildAppHomeView({
       text: {
         type: "mrkdwn",
         text: publicSummaryLines.join("\n")
+      }
+    },
+    {
+      type: "input",
+      block_id: APP_HOME_IDS.trackedListsBlock,
+      optional: true,
+      label: {
+        type: "plain_text",
+        text: "ClickUp lists to include in daily updates"
+      },
+      element: {
+        type: "multi_static_select",
+        action_id: APP_HOME_IDS.trackedListsAction,
+        placeholder: {
+          type: "plain_text",
+          text: "Choose tracked lists"
+        },
+        option_groups: buildClickupListOptionGroups(clickupLists),
+        initial_options: buildClickupListInitialOptions(trackedClickupSources, clickupLists)
       }
     },
     {

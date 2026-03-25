@@ -50,7 +50,33 @@ const runtimeConfig = {
   clickup: {
     sourceType: "list",
     sourceId: "901613969789",
-    sourceUrl: "https://example.com/dev-board"
+    sourceUrl: "https://example.com/dev-board",
+    sources: [
+      {
+        id: "901613969789",
+        sourceType: "list",
+        name: "Dev",
+        teamId: "90161148770",
+        teamName: "Alpha",
+        spaceId: "90165943772",
+        spaceName: "Engineering",
+        folderId: "f123",
+        folderName: "Sprint 17",
+        url: "https://example.com/dev-board"
+      },
+      {
+        id: "901612769947",
+        sourceType: "list",
+        name: "Bugs",
+        teamId: "90161148770",
+        teamName: "Alpha",
+        spaceId: "90165943772",
+        spaceName: "Engineering",
+        folderId: "f123",
+        folderName: "Sprint 17",
+        url: "https://example.com/bugs-board"
+      }
+    ]
   },
   slack: {
     enabled: true,
@@ -71,12 +97,29 @@ const runtimeConfig = {
   taskProperties: ["status", "priority", "owner"]
 };
 
+const clickupLists = [
+  ...runtimeConfig.clickup.sources,
+  {
+    id: "901609797796",
+    sourceType: "list",
+    name: "Marketing",
+    teamId: "90161148770",
+    teamName: "Alpha",
+    spaceId: "90164587447",
+    spaceName: "Marketing",
+    folderId: "",
+    folderName: "",
+    url: "https://example.com/marketing-board"
+  }
+];
+
 test("buildAppHomeView renders the admin control panel for the configured viewer", () => {
   const view = buildAppHomeView({
     viewerUserId: "UADMIN",
     adminUserId: "UADMIN",
     runtimeConfig,
     snapshot: createSnapshot(),
+    clickupLists,
     sourceLabel: "Dev",
     sourceUrl: "https://example.com/dev-board",
     notice: "Sent test DM.",
@@ -94,6 +137,10 @@ test("buildAppHomeView renders the admin control panel for the configured viewer
   assert.match(JSON.stringify(view.blocks), /Show Restricted Preview/);
   assert.match(JSON.stringify(view.blocks), /Public Announcement Settings/);
   assert.match(JSON.stringify(view.blocks), /Private Announcement Settings/);
+  assert.match(JSON.stringify(view.blocks), /Tracked Lists: \*Dev, Bugs\*/);
+  assert.match(JSON.stringify(view.blocks), /ClickUp lists to include in daily updates/);
+  assert.match(JSON.stringify(view.blocks), /Alpha \/ Engineering \/ Sprint 17/);
+  assert.match(JSON.stringify(view.blocks), /Marketing/);
   assert.match(JSON.stringify(view.blocks), /Weekends: \*Disabled\*/);
   assert.match(JSON.stringify(view.blocks), /Send public announcements on Saturdays and Sundays/);
   assert.match(JSON.stringify(view.blocks), /24:00 is allowed for midnight/);
@@ -107,6 +154,7 @@ test("buildAppHomeView can show the restricted view preview to the admin", () =>
     adminUserId: "UADMIN",
     runtimeConfig,
     snapshot: createSnapshot(),
+    clickupLists,
     sourceLabel: "Dev",
     sourceUrl: "https://example.com/dev-board",
     showRestrictedPreview: true
@@ -124,6 +172,7 @@ test("buildAppHomeView renders a restricted view for everyone else", () => {
     adminUserId: "UADMIN",
     runtimeConfig,
     snapshot: createSnapshot(),
+    clickupLists,
     sourceLabel: "Dev",
     sourceUrl: "https://example.com/dev-board"
   });

@@ -12,6 +12,7 @@ import { normalizeOwnerMap } from "../../../src/owner-map-core.mjs";
 import { resolveDestination } from "../../../src/reminder-delivery.mjs";
 import { buildReminderSnapshot } from "../../../src/reminder-snapshot.mjs";
 import {
+  getTrackedClickupSources,
   isWeekendInTimeZone,
   matchesScheduleTime,
   mergeRuntimeConfig
@@ -165,7 +166,11 @@ Deno.serve(async (request) => {
     runDate,
     timeZone: runtimeConfig.schedule.timezone,
     sourceLabel: buckets.sourceLabel || runtimeConfig.clickup.sourceId,
-    sourceUrl: runtimeConfig.clickup.sourceUrl || buckets.sourceUrl,
+    sourceUrl:
+      buckets.sourceUrl ||
+      (getTrackedClickupSources(runtimeConfig.clickup).length === 1
+        ? runtimeConfig.clickup.sourceUrl
+        : null),
     messageStyle: runtimeConfig.messageStyle,
     taskProperties: runtimeConfig.taskProperties
   });
@@ -204,7 +209,11 @@ Deno.serve(async (request) => {
       runDate,
       timeZone: runtimeConfig.schedule.timezone,
       sourceLabel: buckets.sourceLabel || runtimeConfig.clickup.sourceId,
-      sourceUrl: runtimeConfig.clickup.sourceUrl || buckets.sourceUrl
+      sourceUrl:
+        buckets.sourceUrl ||
+        (getTrackedClickupSources(runtimeConfig.clickup).length === 1
+          ? runtimeConfig.clickup.sourceUrl
+          : null)
     });
     adminDestination = await resolveDestination(runtimeConfig.adminSummary, slack);
     adminResult = await slack.postMessage({

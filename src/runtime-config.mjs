@@ -46,6 +46,69 @@ function getTimeSortValue(value) {
   return hours * 60 + minutes;
 }
 
+function normalizeClickupSource(source) {
+  if (source == null) {
+    return null;
+  }
+
+  if (typeof source === "string") {
+    const id = asString(source).trim();
+
+    return id
+      ? {
+          id,
+          sourceType: "list",
+          name: "",
+          teamId: "",
+          teamName: "",
+          spaceId: "",
+          spaceName: "",
+          folderId: "",
+          folderName: "",
+          url: ""
+        }
+      : null;
+  }
+
+  const id = asString(source.id || source.sourceId).trim();
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    sourceType: source.sourceType === "view" ? "view" : "list",
+    name: asString(source.name),
+    teamId: asString(source.teamId),
+    teamName: asString(source.teamName),
+    spaceId: asString(source.spaceId),
+    spaceName: asString(source.spaceName),
+    folderId: asString(source.folderId),
+    folderName: asString(source.folderName),
+    url: asString(source.url || source.sourceUrl)
+  };
+}
+
+function collectNormalizedClickupSources(value) {
+  const rawSources = Array.isArray(value) ? value : [];
+  const normalized = [];
+  const seen = new Set();
+
+  for (const source of rawSources) {
+    const normalizedSource = normalizeClickupSource(source);
+
+    if (!normalizedSource || seen.has(normalizedSource.id)) {
+      continue;
+    }
+
+    seen.add(normalizedSource.id);
+    normalized.push(normalizedSource);
+  }
+
+  return normalized;
+}
+
 export function normalizeScheduleTimes(value, fallback = DEFAULT_SCHEDULE_TIMES) {
   const values = Array.isArray(value)
     ? value
@@ -82,6 +145,33 @@ export function isWeekendInTimeZone(date, timeZone) {
   return weekday === "Sat" || weekday === "Sun";
 }
 
+export function normalizeClickupSources(value, fallback = []) {
+  const normalized = collectNormalizedClickupSources(value);
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return collectNormalizedClickupSources(fallback);
+}
+
+export function getTrackedClickupSources(clickupConfig) {
+  const legacySourceId = asString(clickupConfig?.sourceId).trim();
+  const legacySourceType = clickupConfig?.sourceType === "view" ? "view" : "list";
+  const legacySourceUrl = asString(clickupConfig?.sourceUrl).trim();
+  const legacySources = legacySourceId
+    ? [
+        {
+          id: legacySourceId,
+          sourceType: legacySourceType,
+          url: legacySourceUrl
+        }
+      ]
+    : [];
+
+  return normalizeClickupSources(clickupConfig?.sources, legacySources);
+}
+
 export function normalizeTaskProperties(value, fallback = DEFAULT_TASK_PROPERTIES) {
   const values = Array.isArray(value)
     ? value
@@ -116,15 +206,27 @@ function derivePublicReminderConfig(slackConfig, fallback) {
 }
 
 export function defaultRuntimeConfig({ getEnvValue } = {}) {
+  const envSourceType = readEnv(getEnvValue, "CLICKUP_SOURCE_TYPE") === "view" ? "view" : "list";
+  const envSourceId = asString(readEnv(getEnvValue, "CLICKUP_SOURCE_ID"));
+  const envSourceUrl = asString(readEnv(getEnvValue, "CLICKUP_SOURCE_URL"));
   const envScheduleTimes = normalizeScheduleTimes(
     readEnv(getEnvValue, "SCHEDULE_TIMES") || readEnv(getEnvValue, "SCHEDULE_TIME")
   );
 
   return {
     clickup: {
-      sourceType: readEnv(getEnvValue, "CLICKUP_SOURCE_TYPE") === "view" ? "view" : "list",
-      sourceId: asString(readEnv(getEnvValue, "CLICKUP_SOURCE_ID")),
-      sourceUrl: asString(readEnv(getEnvValue, "CLICKUP_SOURCE_URL"))
+      sourceType: envSourceType,
+      sourceId: envSourceId,
+      sourceUrl: envSourceUrl,
+      sources: envSourceId
+        ? [
+            {
+              id: envSourceId,
+              sourceType: envSourceType,
+              url: envSourceUrl
+            }
+          ]
+        : []
     },
     slack: {
       enabled: asBoolean(readEnv(getEnvValue, "PUBLIC_REMINDER_ENABLED"), true),
@@ -159,12 +261,32 @@ export function mergeRuntimeConfig(value, { getEnvValue } = {}) {
   const adminSummary = value?.adminSummary || {};
   const schedule = value?.schedule || {};
   const scheduleTimes = normalizeScheduleTimes(schedule.times || schedule.time, fallback.schedule.times);
+  const clickupSourceType = clickup.sourceType === "view" ? "view" : fallback.clickup.sourceType;
+  const clickupSourceId = asString(clickup.sourceId, fallback.clickup.sourceId);
+  const clickupSourceUrl = asString(clickup.sourceUrl, fallback.clickup.sourceUrl);
+  const hasExplicitClickupSources = Array.isArray(clickup.sources);
+  const clickupSources = hasExplicitClickupSources
+    ? normalizeClickupSources(clickup.sources, [])
+    : normalizeClickupSources(
+        clickup.sources,
+        clickupSourceId
+          ? [
+              {
+                id: clickupSourceId,
+                sourceType: clickupSourceType,
+                url: clickupSourceUrl
+              }
+            ]
+          : getTrackedClickupSources(fallback.clickup)
+      );
+  const primaryClickupSource = clickupSources[0] || null;
 
   return {
     clickup: {
-      sourceType: clickup.sourceType === "view" ? "view" : fallback.clickup.sourceType,
-      sourceId: asString(clickup.sourceId, fallback.clickup.sourceId),
-      sourceUrl: asString(clickup.sourceUrl, fallback.clickup.sourceUrl)
+      sourceType: primaryClickupSource?.sourceType || clickupSourceType,
+      sourceId: primaryClickupSource?.id || clickupSourceId,
+      sourceUrl: primaryClickupSource?.url || clickupSourceUrl,
+      sources: clickupSources
     },
     slack: derivePublicReminderConfig(value?.slack, fallback.slack),
     adminSummary: {
